@@ -11,8 +11,14 @@ typedef unsigned long           LONG;
 typedef long long           LONGLONG;
 typedef unsigned long long ULONGLONG;
 
+#define DEFAULT_ADDR_LOAD_DLL                  0x10000000
+#define DEFAULT_ADDR_LOAD_EXE                  0x00400000
+#define DEFAULT_ADDR_LOAD_EXE_Windows_CE       0x00010000
+
 #define ___IMAGE_NT_OPTIONAL_HDR32_MAGIC       0x10b
 #define ___IMAGE_NT_OPTIONAL_HDR64_MAGIC       0x20b
+#define ___IMAGE_ROM_OPTIONAL_HDR_MAGIC        0x107   
+
 #define ___IMAGE_NUMBEROF_DIRECTORY_ENTRIES    16
 #define ___IMAGE_DOS_SIGNATURE                 0x5A4D
 
@@ -35,27 +41,27 @@ typedef unsigned long long ULONGLONG;
 #define ___IMAGE_SIZEOF_SHORT_NAME              8
 #define ___IMAGE_SIZEOF_SECTION_HEADER          40
 
-typedef struct __IMAGE_DOS_HEADER {
-    WORD   e_magic;
-    WORD   e_cblp;
-    WORD   e_cp;
-    WORD   e_crlc;
-    WORD   e_cparhdr;
-    WORD   e_minalloc;
-    WORD   e_maxalloc;
-    WORD   e_ss;
-    WORD   e_sp;
-    WORD   e_csum;
-    WORD   e_ip;
-    WORD   e_cs;
-    WORD   e_lfarlc;
-    WORD   e_ovno;
-    WORD   e_res[4];
-    WORD   e_oemid;
-    WORD   e_oeminfo;
-    WORD   e_res2[10];
-    LONG   e_lfanew;
-} ___IMAGE_DOS_HEADER, * ___PIMAGE_DOS_HEADER;
+typedef struct __IMAGE_DOS_HEADER {      // DOS .EXE header
+    WORD   e_magic;                     // Magic number
+    WORD   e_cblp;                      // Bytes on last page of file
+    WORD   e_cp;                        // Pages in file
+    WORD   e_crlc;                      // Relocations
+    WORD   e_cparhdr;                   // Size of header in paragraphs
+    WORD   e_minalloc;                  // Minimum extra paragraphs needed
+    WORD   e_maxalloc;                  // Maximum extra paragraphs needed
+    WORD   e_ss;                        // Initial (relative) SS value
+    WORD   e_sp;                        // Initial SP value
+    WORD   e_csum;                      // Checksum
+    WORD   e_ip;                        // Initial IP value
+    WORD   e_cs;                        // Initial (relative) CS value
+    WORD   e_lfarlc;                    // File address of relocation table
+    WORD   e_ovno;                      // Overlay number
+    WORD   e_res[4];                    // Reserved words
+    WORD   e_oemid;                     // OEM identifier (for e_oeminfo)
+    WORD   e_oeminfo;                   // OEM information; e_oemid specific
+    WORD   e_res2[10];                  // Reserved words
+    LONG   e_lfanew;                    // File address of new exe header
+  } ___IMAGE_DOS_HEADER, *___PIMAGE_DOS_HEADER;
 
 typedef struct __IMAGE_DATA_DIRECTORY {
     DWORD   VirtualAddress;
@@ -141,15 +147,15 @@ typedef struct __IMAGE_FILE_HEADER {
 } ___IMAGE_FILE_HEADER, * ___PIMAGE_FILE_HEADER;
 
 typedef struct __IMAGE_NT_HEADERS64 {
-    DWORD Signature;
-    ___IMAGE_FILE_HEADER FileHeader;
-    ___IMAGE_OPTIONAL_HEADER64 OptionalHeader;
-} ___IMAGE_NT_HEADERS64, * ___PIMAGE_NT_HEADERS64;
+    DWORD                                Signature;
+    ___IMAGE_FILE_HEADER                FileHeader;
+    ___IMAGE_OPTIONAL_HEADER64      OptionalHeader;
+} ___IMAGE_NT_HEADERS64, *  ___PIMAGE_NT_HEADERS64;
 
 typedef struct __IMAGE_NT_HEADERS {
-    DWORD Signature;
-    ___IMAGE_FILE_HEADER FileHeader;
-    ___IMAGE_OPTIONAL_HEADER32 OptionalHeader;
+    DWORD                               Signature;
+    ___IMAGE_FILE_HEADER               FileHeader;
+    ___IMAGE_OPTIONAL_HEADER32     OptionalHeader;
 } ___IMAGE_NT_HEADERS32, * ___PIMAGE_NT_HEADERS32;
 
 typedef struct __IMAGE_IMPORT_DESCRIPTOR {
@@ -161,7 +167,7 @@ typedef struct __IMAGE_IMPORT_DESCRIPTOR {
     DWORD   ForwarderChain;
     DWORD   Name;
     DWORD   FirstThunk;
-} ___IMAGE_IMPORT_DESCRIPTOR, * ___PIMAGE_IMPORT_DESCRIPTOR;
+} ___IMAGE_IMPORT_DESCRIPTOR UNALIGNED, * ___PIMAGE_IMPORT_DESCRIPTOR;
 
 typedef struct __IMAGE_IMPORT_BY_NAME {
     WORD    Hint;
@@ -205,17 +211,17 @@ typedef struct __RICH_HEADER {
 
 typedef struct __ILT_ENTRY_32 {
     union {
-        DWORD ORDINAL : 16;
-        DWORD HINT_NAME_TABE : 32;
-        DWORD ORDINAL_NAME_FLAG : 1;
+        DWORD ORDINAL           : 16;
+        DWORD HINT_NAME_TABE    : 32;
+        DWORD ORDINAL_NAME_FLAG  : 1;
     } FIELD_1;
 } ILT_ENTRY_32, * PILT_ENTRY_32;
 typedef struct __ILT_ENTRY_64 {
     union {
-        DWORD ORDINAL : 16;
-        DWORD HINT_NAME_TABE : 32;
+        DWORD ORDINAL           : 16;
+        DWORD HINT_NAME_TABE    : 32;
     } FIELD_2;
-    DWORD ORDINAL_NAME_FLAG : 1;
+    DWORD ORDINAL_NAME_FLAG     : 1;
 } ILT_ENTRY_64, * PILT_ENTRY_64;
 
 typedef struct __BASE_RELOC_ENTRY {
