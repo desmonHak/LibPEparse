@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+// fuente original: https://github.com/0xRick/PE-Parser/blob/main/PE-Parser/PE64FILE.cpp
+
 typedef uint8_t                 BYTE;
 typedef uint16_t                WORD;
 typedef uint32_t               DWORD;
