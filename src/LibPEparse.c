@@ -1,11 +1,16 @@
 #include "../include/LibPEparse.h"
 #include <stdlib.h>
 
-// Implementación de las funciones
+// Nueva función para inicializar la estructura PE64FILE
+void PE64FILE_Initialize(PE64FILE* peFile) {
+    memset(peFile, 0, sizeof(PE64FILE)); // Inicializar todos los campos a 0
+    peFile->PEFILE_RICH_HEADER_INFO.size = 0;
+}
 
 PE64FILE* PE64FILE_Create(char* _NAME, FILE* Ppefile) {
     PE64FILE* peFile = (PE64FILE*)malloc(sizeof(PE64FILE));
     if (peFile != NULL) {
+        PE64FILE_Initialize(peFile); // Inicializar la estructura
         peFile->NAME = _NAME;
         peFile->Ppefile = Ppefile;
         ParseFile64(peFile);
@@ -15,6 +20,18 @@ PE64FILE* PE64FILE_Create(char* _NAME, FILE* Ppefile) {
 
 void PE64FILE_Destroy(PE64FILE* peFile) {
     if (peFile != NULL) {
+        //Free rich header
+        if (peFile->PEFILE_RICH_HEADER_INFO.ptrToBuffer != NULL){
+            free(peFile->PEFILE_RICH_HEADER_INFO.ptrToBuffer);
+        }
+        if (peFile->PEFILE_RICH_HEADER.entries != NULL){
+            free(peFile->PEFILE_RICH_HEADER.entries);
+        }
+        if (peFile->PEFILE_SECTION_HEADERS != NULL){
+            free(peFile->PEFILE_SECTION_HEADERS);
+        }
+
+        fclose(peFile->Ppefile);
         free(peFile);
     }
 }
@@ -656,4 +673,204 @@ void PrintBaseRelocationsInfo64(PE64FILE * peFile) {
 		szCounter += BLOCKSIZE;
 	}
 
+}
+
+DWORD align(DWORD size, DWORD alignment) {
+    if (alignment == 0) return size;
+    return (size + alignment - 1) & ~(alignment - 1);
+}
+
+void AddNewSection64(PE64FILE* peFile, const char* newSectionName, DWORD sizeOfRawData, const void* sectionData, int sectionType) {
+    // 0. Get the File and Section Alignment
+    DWORD sectionAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.SectionAlignment;
+    DWORD fileAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.FileAlignment;
+
+    // 1.  Calculate aligned sizes
+    DWORD alignedVirtualSize = align(sizeOfRawData, sectionAlignment);
+    DWORD alignedSizeOfRawData = align(sizeOfRawData, fileAlignment);
+
+    // 2. Calculate the position of the new section
+    DWORD lastSectionEnd = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
+    DWORD lastRawDataEnd = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
+
+    if (peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections > 0) {
+        // Find the last section with actual raw data
+        for (int i = peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections - 1; i >= 0; i--) {
+            ___IMAGE_SECTION_HEADER* section = &peFile->PEFILE_SECTION_HEADERS[i];
+            if (section->PointerToRawData != 0 && section->SizeOfRawData != 0) {
+                lastRawDataEnd = section->PointerToRawData + section->SizeOfRawData;
+                break;
+            }
+        }
+        // Use the last section's end position for virtual address calculation
+        ___IMAGE_SECTION_HEADER* lastSection = &peFile->PEFILE_SECTION_HEADERS[peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections - 1];
+        lastSectionEnd = lastSection->VirtualAddress + lastSection->Misc.VirtualSize;
+    }
+
+    // Align the calculated values
+    DWORD newSectionVirtualAddress = align(lastSectionEnd, sectionAlignment);
+    DWORD newSectionPointerToRawData = align(lastRawDataEnd, fileAlignment);
+ 
+    // Ensure the new section doesn't overlap with headers
+     if (newSectionPointerToRawData < peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders) {
+        newSectionPointerToRawData = align(peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders, fileAlignment);
+     }
+
+    // 3. Create the new section header
+    ___IMAGE_SECTION_HEADER newSection;
+    memset(&newSection, 0, sizeof(___IMAGE_SECTION_HEADER));
+    strncpy((char*)newSection.Name, newSectionName, 8);
+    newSection.Misc.VirtualSize = alignedVirtualSize;
+    newSection.SizeOfRawData = align(sizeOfRawData, fileAlignment); // Ensure SizeOfRawData is aligned
+    newSection.VirtualAddress = newSectionVirtualAddress;
+    newSection.PointerToRawData = newSectionPointerToRawData;
+    newSection.Characteristics = IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE | IMAGE_SCN_CNT_INITIALIZED_DATA;
+
+    //3.5. Update the characteristics based on section type
+    switch (sectionType) {
+        case SECTION_TYPE_CODE:
+            newSection.Characteristics |= IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE;
+            break;
+        case SECTION_TYPE_INITIALIZED_DATA:
+            newSection.Characteristics |= IMAGE_SCN_CNT_INITIALIZED_DATA;
+            break;
+        case SECTION_TYPE_UNINITIALIZED_DATA:
+            newSection.Characteristics |= IMAGE_SCN_CNT_UNINITIALIZED_DATA;
+            break;
+        default:
+            //If there is no section type specified it uses the default data.
+            newSection.Characteristics |= IMAGE_SCN_CNT_INITIALIZED_DATA;
+            break;
+    }
+
+    // 4. Reallocate the section headers array
+    if (peFile->PEFILE_SECTION_HEADERS == NULL) {
+        peFile->PEFILE_SECTION_HEADERS = (___PIMAGE_SECTION_HEADER)malloc(sizeof(___IMAGE_SECTION_HEADER));
+    } else {
+        peFile->PEFILE_SECTION_HEADERS = realloc(peFile->PEFILE_SECTION_HEADERS,
+                                                 sizeof(___IMAGE_SECTION_HEADER) * (peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections + 1));
+    }
+    if (peFile->PEFILE_SECTION_HEADERS == NULL) {
+        fprintf(stderr, "Error reallocating section headers.\n");
+        return; // Or handle the error appropriately
+    }
+
+    // 5. Add the new section to the array
+    peFile->PEFILE_SECTION_HEADERS[peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections] = newSection;
+
+    // 6. Update the NumberOfSections in the FileHeader
+    peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections++;
+    peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS = peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections;
+
+    // 7. Update SizeOfImage
+    peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfImage = align(newSectionVirtualAddress + alignedVirtualSize, sectionAlignment);
+    peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_IMAGE = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfImage;
+}
+
+void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sectionData, DWORD sizeOfRawData) {
+    FILE* newFile = fopen(newFileName, "wb");
+    if (newFile == NULL) {
+        printf("Error creating the new file.\n");
+        return;
+    }
+
+    DWORD fileAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.FileAlignment;
+    DWORD sizeOfHeaders = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
+
+    // 1. Write DOS Header
+    fwrite(&peFile->PEFILE_DOS_HEADER, sizeof(___IMAGE_DOS_HEADER), 1, newFile);
+
+    // 2. Write the space between DOS Header and NT Headers (e_lfanew)
+    fseek(peFile->Ppefile, sizeof(___IMAGE_DOS_HEADER), SEEK_SET);
+    long dosToNtSize = peFile->PEFILE_DOS_HEADER.e_lfanew - sizeof(___IMAGE_DOS_HEADER);
+    char* dosToNt = (char*)malloc(dosToNtSize);
+    if (dosToNt == NULL) {
+        fclose(newFile);
+        return;
+    }
+    fread(dosToNt, dosToNtSize, 1, peFile->Ppefile);
+    fwrite(dosToNt, dosToNtSize, 1, newFile);
+    free(dosToNt);
+
+    // 3. Write NT Headers (Signature, FileHeader, OptionalHeader)
+    fwrite(&peFile->PEFILE_NT_HEADERS, sizeof(___IMAGE_NT_HEADERS64), 1, newFile);
+
+    // 4. Write Section Headers
+    fwrite(peFile->PEFILE_SECTION_HEADERS, sizeof(___IMAGE_SECTION_HEADER),
+           peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections, newFile);
+
+    // Pad headers to SizeOfHeaders
+    DWORD currentOffset = ftell(newFile);
+    if (currentOffset < sizeOfHeaders) {
+        DWORD paddingSize = sizeOfHeaders - currentOffset;
+        char* padding = (char*)calloc(1, paddingSize);
+        if (!padding) {
+            fclose(newFile);
+            return;
+        }
+        fwrite(padding, 1, paddingSize, newFile);
+        free(padding);
+    }
+
+    // 5. Copy Section Data
+    DWORD lastSectionEnd = 0;
+    for (int i = 0; i < peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections; i++) {
+        ___IMAGE_SECTION_HEADER* sectionHeader = &peFile->PEFILE_SECTION_HEADERS[i];
+        DWORD rawDataSize = sectionHeader->SizeOfRawData;
+        DWORD rawDataPtr = sectionHeader->PointerToRawData;
+
+        if (rawDataPtr == 0 || rawDataSize == 0) {
+            // Skip uninitialized data sections
+            continue;
+        }
+
+        // Seek to the correct position in the new file
+        fseek(newFile, rawDataPtr, SEEK_SET);
+
+        if (i < peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections - 1) {
+            // Original sections
+            char* sectionDataBuffer = (char*)malloc(rawDataSize);
+            if (!sectionDataBuffer) {
+                fclose(newFile);
+                return;
+            }
+
+            fseek(peFile->Ppefile, rawDataPtr, SEEK_SET);
+            fread(sectionDataBuffer, rawDataSize, 1, peFile->Ppefile);
+            fwrite(sectionDataBuffer, rawDataSize, 1, newFile);
+            free(sectionDataBuffer);
+        } else {
+            // New section
+            fwrite(sectionData, sizeOfRawData, 1, newFile);
+            DWORD paddingSize = rawDataSize - sizeOfRawData;
+            if (paddingSize > 0) {
+                char* padding = (char*)calloc(1, paddingSize);
+                if (!padding) {
+                    fclose(newFile);
+                    return;
+                }
+                fwrite(padding, 1, paddingSize, newFile);
+                free(padding);
+            }
+        }
+
+        lastSectionEnd = rawDataPtr + rawDataSize;
+    }
+
+    // Ensure the file size is a multiple of FileAlignment
+    DWORD currentFileSize = ftell(newFile);
+    DWORD alignedFileSize = (currentFileSize + fileAlignment - 1) & ~(fileAlignment - 1);
+    DWORD finalPaddingSize = alignedFileSize - currentFileSize;
+
+    if (finalPaddingSize > 0) {
+        char* padding = (char*)calloc(1, finalPaddingSize);
+        if (!padding) {
+            fclose(newFile);
+            return;
+        }
+        fwrite(padding, 1, finalPaddingSize, newFile);
+        free(padding);
+    }
+
+    fclose(newFile);
 }

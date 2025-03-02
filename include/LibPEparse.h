@@ -3,13 +3,65 @@
 #include <stdbool.h>
 #include <string.h>
 
-typedef uint8_t                 BYTE;
-typedef uint16_t                WORD;
-typedef uint32_t               DWORD;
+//typedef uint8_t                 BYTE;
+//typedef uint16_t                WORD;
+//typedef uint32_t               DWORD;
 typedef uint64_t               QWORD;
-typedef unsigned long           LONG;
-typedef long long           LONGLONG;
-typedef unsigned long long ULONGLONG;
+//typedef unsigned long           LONG;
+//typedef long long           LONGLONG;
+//typedef unsigned long long ULONGLONG;
+
+
+
+#pragma pack(push, 1)
+/* AMD64 Specific types */
+#define IMAGE_REL_AMD64_ABSOLUTE    0x0000
+#define IMAGE_REL_AMD64_ADDR64      0x0001
+#define IMAGE_REL_AMD64_ADDR32      0x0002
+#define IMAGE_REL_AMD64_ADDR32NB    0x0003
+/* Most common from the looks of it, just 32-bit relative address from the byte following the relocation */
+#define IMAGE_REL_AMD64_REL32       0x0004
+/* Second most common, 32-bit address without an image base. Not sure what that means... */
+#define IMAGE_REL_AMD64_REL32_1     0x0005
+#define IMAGE_REL_AMD64_REL32_2     0x0006
+#define IMAGE_REL_AMD64_REL32_3     0x0007
+#define IMAGE_REL_AMD64_REL32_4     0x0008
+#define IMAGE_REL_AMD64_REL32_5     0x0009
+#define IMAGE_REL_AMD64_SECTION     0x000A
+#define IMAGE_REL_AMD64_SECREL      0x000B
+#define IMAGE_REL_AMD64_SECREL7     0x000C
+#define IMAGE_REL_AMD64_TOKEN       0x000D
+#define IMAGE_REL_AMD64_SREL32      0x000E
+#define IMAGE_REL_AMD64_PAIR        0x000F
+#define IMAGE_REL_AMD64_SSPAN32     0x0010
+
+/*i386 Relocation types */
+
+#define IMAGE_REL_I386_ABSOLUTE     0x0000
+#define IMAGE_REL_I386_DIR16        0x0001
+#define IMAGE_REL_I386_REL16        0x0002
+#define IMAGE_REL_I386_DIR32        0x0006
+#define IMAGE_REL_I386_DIR32NB      0x0007
+#define IMAGE_REL_I386_SEG12        0x0009
+#define IMAGE_REL_I386_SECTION      0x000A
+#define IMAGE_REL_I386_SECREL       0x000B
+#define IMAGE_REL_I386_TOKEN        0x000C
+#define IMAGE_REL_I386_SECREL7      0x000D
+#define IMAGE_REL_I386_REL32        0x0014
+
+/* Section Characteristic Flags */
+
+#define IMAGE_SCN_MEM_WRITE                 0x80000000
+#define IMAGE_SCN_MEM_READ                  0x40000000
+#define IMAGE_SCN_MEM_EXECUTE               0x20000000
+#define IMAGE_SCN_ALIGN_16BYTES             0x00500000
+#define IMAGE_SCN_MEM_NOT_CACHED            0x04000000
+#define IMAGE_SCN_MEM_NOT_PAGED             0x08000000
+#define IMAGE_SCN_MEM_SHARED                0x10000000
+#define IMAGE_SCN_CNT_CODE                  0x00000020
+#define IMAGE_SCN_CNT_INITIALIZED_DATA      0x00000040
+#define IMAGE_SCN_CNT_UNINITIALIZED_DATA    0x00000080
+#define IMAGE_SCN_MEM_DISCARDABLE           0x02000000
 
 #define DEFAULT_ADDR_LOAD_DLL                  0x10000000
 #define DEFAULT_ADDR_LOAD_EXE                  0x00400000
@@ -41,6 +93,7 @@ typedef unsigned long long ULONGLONG;
 #define ___IMAGE_SIZEOF_SHORT_NAME              8
 #define ___IMAGE_SIZEOF_SECTION_HEADER          40
 
+#pragma pack(push)
 typedef struct __IMAGE_DOS_HEADER {      // DOS .EXE header
     WORD   e_magic;                     // Magic number
     WORD   e_cblp;                      // Bytes on last page of file
@@ -229,6 +282,8 @@ typedef struct __BASE_RELOC_ENTRY {
     WORD TYPE : 4;
 } BASE_RELOC_ENTRY, * PBASE_RELOC_ENTRY;
 
+#pragma pack(pop)
+
 // Definición de la estructura PE64FILE
 typedef struct {
     char* NAME;
@@ -296,3 +351,9 @@ typedef struct {
     // Tabla de reubicación base
     ___PIMAGE_BASE_RELOCATION PEFILE_BASERELOC_TABLE;
 } PE64FILE;
+
+
+
+#define SECTION_TYPE_CODE 1
+#define SECTION_TYPE_INITIALIZED_DATA 2
+#define SECTION_TYPE_UNINITIALIZED_DATA 3

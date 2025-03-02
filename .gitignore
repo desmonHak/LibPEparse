@@ -4,3 +4,4 @@
 *.lib
 *.o
 *.obj
+src/add_section_example.c
