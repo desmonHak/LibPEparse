@@ -435,7 +435,7 @@ int main() {
     FunctionOffset funcOffsets[] = {
         // 10 bytes (descriptor de KERNEL32.dll) +
         // 10 bytes (descriptor de USER32.dll) +
-        // 8 bytes (primeros bytes de la tabla de nombres) = 48 bytes
+        // 8 bytes (primeros bytes de la tabla de nombres) = 28 bytes
         {68, "MessageBoxA"},
         {28, "ExitProcess"},
         {36, "WriteConsoleA"}
