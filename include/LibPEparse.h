@@ -1,15 +1,21 @@
+#ifndef LIB_PE_PARSE_H
+#define LIB_PE_PARSE_H
+
+#include <stdlib.h>
+#include <errno.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
 
-//typedef uint8_t                 BYTE;
-//typedef uint16_t                WORD;
-//typedef uint32_t               DWORD;
-typedef uint64_t               QWORD;
-//typedef unsigned long           LONG;
-//typedef long long           LONGLONG;
-//typedef unsigned long long ULONGLONG;
+typedef uint8_t                 _BYTE;
+typedef uint16_t                _WORD;
+typedef uint32_t               _DWORD;
+typedef uint64_t               _QWORD;
+typedef unsigned long           _LONG;
+typedef long long           _LONGLONG;
+typedef unsigned long long _ULONGLONG;
 
 
 
@@ -95,157 +101,157 @@ typedef uint64_t               QWORD;
 
 #pragma pack(push)
 typedef struct __IMAGE_DOS_HEADER {      // DOS .EXE header
-    WORD   e_magic;                     // Magic number
-    WORD   e_cblp;                      // Bytes on last page of file
-    WORD   e_cp;                        // Pages in file
-    WORD   e_crlc;                      // Relocations
-    WORD   e_cparhdr;                   // Size of header in paragraphs
-    WORD   e_minalloc;                  // Minimum extra paragraphs needed
-    WORD   e_maxalloc;                  // Maximum extra paragraphs needed
-    WORD   e_ss;                        // Initial (relative) SS value
-    WORD   e_sp;                        // Initial SP value
-    WORD   e_csum;                      // Checksum
-    WORD   e_ip;                        // Initial IP value
-    WORD   e_cs;                        // Initial (relative) CS value
-    WORD   e_lfarlc;                    // File address of relocation table
-    WORD   e_ovno;                      // Overlay number
-    WORD   e_res[4];                    // Reserved words
-    WORD   e_oemid;                     // OEM identifier (for e_oeminfo)
-    WORD   e_oeminfo;                   // OEM information; e_oemid specific
-    WORD   e_res2[10];                  // Reserved words
-    LONG   e_lfanew;                    // File address of new exe header
+    _WORD   e_magic;                     // Magic number
+    _WORD   e_cblp;                      // Bytes on last page of file
+    _WORD   e_cp;                        // Pages in file
+    _WORD   e_crlc;                      // Relocations
+    _WORD   e_cparhdr;                   // Size of header in paragraphs
+    _WORD   e_minalloc;                  // Minimum extra paragraphs needed
+    _WORD   e_maxalloc;                  // Maximum extra paragraphs needed
+    _WORD   e_ss;                        // Initial (relative) SS value
+    _WORD   e_sp;                        // Initial SP value
+    _WORD   e_csum;                      // Checksum
+    _WORD   e_ip;                        // Initial IP value
+    _WORD   e_cs;                        // Initial (relative) CS value
+    _WORD   e_lfarlc;                    // File address of relocation table
+    _WORD   e_ovno;                      // Overlay number
+    _WORD   e_res[4];                    // Reserved words
+    _WORD   e_oemid;                     // OEM identifier (for e_oeminfo)
+    _WORD   e_oeminfo;                   // OEM information; e_oemid specific
+    _WORD   e_res2[10];                  // Reserved words
+    _LONG   e_lfanew;                    // File address of new exe header
   } ___IMAGE_DOS_HEADER, *___PIMAGE_DOS_HEADER;
 
 typedef struct __IMAGE_DATA_DIRECTORY {
-    DWORD   VirtualAddress;
-    DWORD   Size;
+    _DWORD   VirtualAddress;
+    _DWORD   Size;
 } ___IMAGE_DATA_DIRECTORY, * ___PIMAGE_DATA_DIRECTORY;
 
 
 typedef struct __IMAGE_OPTIONAL_HEADER {
-    WORD    Magic;
-    BYTE    MajorLinkerVersion;
-    BYTE    MinorLinkerVersion;
-    DWORD   SizeOfCode;
-    DWORD   SizeOfInitializedData;
-    DWORD   SizeOfUninitializedData;
-    DWORD   AddressOfEntryPoint;
-    DWORD   BaseOfCode;
-    DWORD   BaseOfData;
-    DWORD   ImageBase;
-    DWORD   SectionAlignment;
-    DWORD   FileAlignment;
-    WORD    MajorOperatingSystemVersion;
-    WORD    MinorOperatingSystemVersion;
-    WORD    MajorImageVersion;
-    WORD    MinorImageVersion;
-    WORD    MajorSubsystemVersion;
-    WORD    MinorSubsystemVersion;
-    DWORD   Win32VersionValue;
-    DWORD   SizeOfImage;
-    DWORD   SizeOfHeaders;
-    DWORD   CheckSum;
-    WORD    Subsystem;
-    WORD    DllCharacteristics;
-    DWORD   SizeOfStackReserve;
-    DWORD   SizeOfStackCommit;
-    DWORD   SizeOfHeapReserve;
-    DWORD   SizeOfHeapCommit;
-    DWORD   LoaderFlags;
-    DWORD   NumberOfRvaAndSizes;
+    _WORD    Magic;
+    _BYTE    MajorLinkerVersion;
+    _BYTE    MinorLinkerVersion;
+    _DWORD   SizeOfCode;
+    _DWORD   SizeOfInitializedData;
+    _DWORD   SizeOfUninitializedData;
+    _DWORD   AddressOfEntryPoint;
+    _DWORD   BaseOfCode;
+    _DWORD   BaseOfData;
+    _DWORD   ImageBase;
+    _DWORD   SectionAlignment;
+    _DWORD   FileAlignment;
+    _WORD    MajorOperatingSystemVersion;
+    _WORD    MinorOperatingSystemVersion;
+    _WORD    MajorImageVersion;
+    _WORD    MinorImageVersion;
+    _WORD    MajorSubsystemVersion;
+    _WORD    MinorSubsystemVersion;
+    _DWORD   Win32VersionValue;
+    _DWORD   SizeOfImage;
+    _DWORD   SizeOfHeaders;
+    _DWORD   CheckSum;
+    _WORD    Subsystem;
+    _WORD    DllCharacteristics;
+    _DWORD   SizeOfStackReserve;
+    _DWORD   SizeOfStackCommit;
+    _DWORD   SizeOfHeapReserve;
+    _DWORD   SizeOfHeapCommit;
+    _DWORD   LoaderFlags;
+    _DWORD   NumberOfRvaAndSizes;
     ___IMAGE_DATA_DIRECTORY DataDirectory[___IMAGE_NUMBEROF_DIRECTORY_ENTRIES];
 } ___IMAGE_OPTIONAL_HEADER32, * ___PIMAGE_OPTIONAL_HEADER32;
 
 typedef struct __IMAGE_OPTIONAL_HEADER64 {
-    WORD        Magic;
-    BYTE        MajorLinkerVersion;
-    BYTE        MinorLinkerVersion;
-    DWORD       SizeOfCode;
-    DWORD       SizeOfInitializedData;
-    DWORD       SizeOfUninitializedData;
-    DWORD       AddressOfEntryPoint;
-    DWORD       BaseOfCode;
-    ULONGLONG   ImageBase;
-    DWORD       SectionAlignment;
-    DWORD       FileAlignment;
-    WORD        MajorOperatingSystemVersion;
-    WORD        MinorOperatingSystemVersion;
-    WORD        MajorImageVersion;
-    WORD        MinorImageVersion;
-    WORD        MajorSubsystemVersion;
-    WORD        MinorSubsystemVersion;
-    DWORD       Win32VersionValue;
-    DWORD       SizeOfImage;
-    DWORD       SizeOfHeaders;
-    DWORD       CheckSum;
-    WORD        Subsystem;
-    WORD        DllCharacteristics;
-    ULONGLONG   SizeOfStackReserve;
-    ULONGLONG   SizeOfStackCommit;
-    ULONGLONG   SizeOfHeapReserve;
-    ULONGLONG   SizeOfHeapCommit;
-    DWORD       LoaderFlags;
-    DWORD       NumberOfRvaAndSizes;
+    _WORD        Magic;
+    _BYTE        MajorLinkerVersion;
+    _BYTE        MinorLinkerVersion;
+    _DWORD       SizeOfCode;
+    _DWORD       SizeOfInitializedData;
+    _DWORD       SizeOfUninitializedData;
+    _DWORD       AddressOfEntryPoint;
+    _DWORD       BaseOfCode;
+    _ULONGLONG   ImageBase;
+    _DWORD       SectionAlignment;
+    _DWORD       FileAlignment;
+    _WORD        MajorOperatingSystemVersion;
+    _WORD        MinorOperatingSystemVersion;
+    _WORD        MajorImageVersion;
+    _WORD        MinorImageVersion;
+    _WORD        MajorSubsystemVersion;
+    _WORD        MinorSubsystemVersion;
+    _DWORD       Win32VersionValue;
+    _DWORD       SizeOfImage;
+    _DWORD       SizeOfHeaders;
+    _DWORD       CheckSum;
+    _WORD        Subsystem;
+    _WORD        DllCharacteristics;
+    _ULONGLONG   SizeOfStackReserve;
+    _ULONGLONG   SizeOfStackCommit;
+    _ULONGLONG   SizeOfHeapReserve;
+    _ULONGLONG   SizeOfHeapCommit;
+    _DWORD       LoaderFlags;
+    _DWORD       NumberOfRvaAndSizes;
     ___IMAGE_DATA_DIRECTORY DataDirectory[___IMAGE_NUMBEROF_DIRECTORY_ENTRIES];
 } ___IMAGE_OPTIONAL_HEADER64, * ___PIMAGE_OPTIONAL_HEADER64;
 
 typedef struct __IMAGE_FILE_HEADER {
-    WORD    Machine;
-    WORD    NumberOfSections;
-    DWORD   TimeDateStamp;
-    DWORD   PointerToSymbolTable;
-    DWORD   NumberOfSymbols;
-    WORD    SizeOfOptionalHeader;
-    WORD    Characteristics;
+    _WORD    Machine;
+    _WORD    NumberOfSections;
+    _DWORD   TimeDateStamp;
+    _DWORD   PointerToSymbolTable;
+    _DWORD   NumberOfSymbols;
+    _WORD    SizeOfOptionalHeader;
+    _WORD    Characteristics;
 } ___IMAGE_FILE_HEADER, * ___PIMAGE_FILE_HEADER;
 
 typedef struct __IMAGE_NT_HEADERS64 {
-    DWORD                                Signature;
+    _DWORD                                Signature;
     ___IMAGE_FILE_HEADER                FileHeader;
     ___IMAGE_OPTIONAL_HEADER64      OptionalHeader;
 } ___IMAGE_NT_HEADERS64, *  ___PIMAGE_NT_HEADERS64;
 
 typedef struct __IMAGE_NT_HEADERS {
-    DWORD                               Signature;
+    _DWORD                               Signature;
     ___IMAGE_FILE_HEADER               FileHeader;
     ___IMAGE_OPTIONAL_HEADER32     OptionalHeader;
 } ___IMAGE_NT_HEADERS32, * ___PIMAGE_NT_HEADERS32;
 
 typedef struct __IMAGE_IMPORT_DESCRIPTOR {
     union {
-        DWORD   Characteristics;
-        DWORD   OriginalFirstThunk;
+        _DWORD   Characteristics;
+        _DWORD   OriginalFirstThunk;
     } DUMMYUNIONNAME__;
-    DWORD   TimeDateStamp;
-    DWORD   ForwarderChain;
-    DWORD   Name;
-    DWORD   FirstThunk;
+    _DWORD   TimeDateStamp;
+    _DWORD   ForwarderChain;
+    _DWORD   Name;
+    _DWORD   FirstThunk;
 } ___IMAGE_IMPORT_DESCRIPTOR UNALIGNED, * ___PIMAGE_IMPORT_DESCRIPTOR;
 
 typedef struct __IMAGE_IMPORT_BY_NAME {
-    WORD    Hint;
+    _WORD    Hint;
     char   Name[100];
 } ___IMAGE_IMPORT_BY_NAME, * ___PIMAGE_IMPORT_BY_NAME;
 
 typedef struct __IMAGE_BASE_RELOCATION {
-    DWORD   VirtualAddress;
-    DWORD   SizeOfBlock;
+    _DWORD   VirtualAddress;
+    _DWORD   SizeOfBlock;
 } ___IMAGE_BASE_RELOCATION, * ___PIMAGE_BASE_RELOCATION;
 
 typedef struct __IMAGE_SECTION_HEADER {
-    BYTE    Name[___IMAGE_SIZEOF_SHORT_NAME];
+    _BYTE    Name[___IMAGE_SIZEOF_SHORT_NAME];
     union {
-        DWORD   PhysicalAddress;
-        DWORD   VirtualSize;
+        _DWORD   PhysicalAddress;
+        _DWORD   VirtualSize;
     } Misc;
-    DWORD   VirtualAddress;
-    DWORD   SizeOfRawData;
-    DWORD   PointerToRawData;
-    DWORD   PointerToRelocations;
-    DWORD   PointerToLinenumbers;
-    WORD    NumberOfRelocations;
-    WORD    NumberOfLinenumbers;
-    DWORD   Characteristics;
+    _DWORD   VirtualAddress;
+    _DWORD   SizeOfRawData;
+    _DWORD   PointerToRawData;
+    _DWORD   PointerToRelocations;
+    _DWORD   PointerToLinenumbers;
+    _WORD    NumberOfRelocations;
+    _WORD    NumberOfLinenumbers;
+    _DWORD   Characteristics;
 } ___IMAGE_SECTION_HEADER, * ___PIMAGE_SECTION_HEADER;
 
 typedef struct __RICH_HEADER_INFO {
@@ -254,9 +260,9 @@ typedef struct __RICH_HEADER_INFO {
     int entries;
 } RICH_HEADER_INFO, * PRICH_HEADER_INFO;
 typedef struct __RICH_HEADER_ENTRY {
-    WORD  prodID;
-    WORD  buildID;
-    DWORD useCount;
+    _WORD  prodID;
+    _WORD  buildID;
+    _DWORD useCount;
 } RICH_HEADER_ENTRY, * PRICH_HEADER_ENTRY;
 typedef struct __RICH_HEADER {
     PRICH_HEADER_ENTRY entries;
@@ -264,22 +270,22 @@ typedef struct __RICH_HEADER {
 
 typedef struct __ILT_ENTRY_32 {
     union {
-        DWORD ORDINAL           : 16;
-        DWORD HINT_NAME_TABE    : 32;
-        DWORD ORDINAL_NAME_FLAG  : 1;
+        _DWORD ORDINAL           : 16;
+        _DWORD HINT_NAME_TABE    : 32;
+        _DWORD ORDINAL_NAME_FLAG  : 1;
     } FIELD_1;
 } ILT_ENTRY_32, * PILT_ENTRY_32;
 typedef struct __ILT_ENTRY_64 {
     union {
-        DWORD ORDINAL           : 16;
-        DWORD HINT_NAME_TABE    : 32;
+        _DWORD ORDINAL           : 16;
+        _DWORD HINT_NAME_TABE    : 32;
     } FIELD_2;
-    DWORD ORDINAL_NAME_FLAG     : 1;
+    _DWORD ORDINAL_NAME_FLAG     : 1;
 } ILT_ENTRY_64, * PILT_ENTRY_64;
 
 typedef struct __BASE_RELOC_ENTRY {
-    WORD OFFSET : 12;
-    WORD TYPE : 4;
+    _WORD OFFSET : 12;
+    _WORD TYPE : 4;
 } BASE_RELOC_ENTRY, * PBASE_RELOC_ENTRY;
 
 #pragma pack(pop)
@@ -297,33 +303,33 @@ typedef struct {
     ___IMAGE_NT_HEADERS64 PEFILE_NT_HEADERS;
 
     // DOS HEADER
-    DWORD PEFILE_DOS_HEADER_EMAGIC;
-    LONG PEFILE_DOS_HEADER_LFANEW;
+    _DWORD PEFILE_DOS_HEADER_EMAGIC;
+    _LONG PEFILE_DOS_HEADER_LFANEW;
 
     // RICH HEADER
     RICH_HEADER_INFO PEFILE_RICH_HEADER_INFO;
     RICH_HEADER PEFILE_RICH_HEADER;
 
     // NT_HEADERS.Signature
-    DWORD PEFILE_NT_HEADERS_SIGNATURE;
+    _DWORD PEFILE_NT_HEADERS_SIGNATURE;
 
     // NT_HEADERS.FileHeader
-    WORD PEFILE_NT_HEADERS_FILE_HEADER_MACHINE;
-    WORD PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS;
-    WORD PEFILE_NT_HEADERS_FILE_HEADER_SIZEOF_OPTIONAL_HEADER;
+    _WORD PEFILE_NT_HEADERS_FILE_HEADER_MACHINE;
+    _WORD PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS;
+    _WORD PEFILE_NT_HEADERS_FILE_HEADER_SIZEOF_OPTIONAL_HEADER;
 
     // NT_HEADERS.OptionalHeader
-    DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_MAGIC;
-    DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_CODE;
-    DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_INITIALIZED_DATA;
-    DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_UNINITIALIZED_DATA;
-    DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_ADDRESS_OF_ENTRYPOINT;
-    DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_BASE_OF_CODE;
-    ULONGLONG PEFILE_NT_HEADERS_OPTIONAL_HEADER_IMAGEBASE;
-    DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SECTION_ALIGNMENT;
-    DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_FILE_ALIGNMENT;
-    DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_IMAGE;
-    DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_HEADERS;
+    _DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_MAGIC;
+    _DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_CODE;
+    _DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_INITIALIZED_DATA;
+    _DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_UNINITIALIZED_DATA;
+    _DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_ADDRESS_OF_ENTRYPOINT;
+    _DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_BASE_OF_CODE;
+    _ULONGLONG PEFILE_NT_HEADERS_OPTIONAL_HEADER_IMAGEBASE;
+    _DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SECTION_ALIGNMENT;
+    _DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_FILE_ALIGNMENT;
+    _DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_IMAGE;
+    _DWORD PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_HEADERS;
 
     // Directorios de datos
     ___IMAGE_DATA_DIRECTORY PEFILE_EXPORT_DIRECTORY;
@@ -357,3 +363,38 @@ typedef struct {
 #define SECTION_TYPE_CODE 1
 #define SECTION_TYPE_INITIALIZED_DATA 2
 #define SECTION_TYPE_UNINITIALIZED_DATA 3
+
+void PE64FILE_Initialize(PE64FILE* peFile);
+PE64FILE* PE64FILE_Create(char* _NAME, FILE* Ppefile);
+void PE64FILE_Destroy(PE64FILE* peFile);
+void PE64FILE_PrintInfo64(PE64FILE* peFile);
+void ParseFile64(PE64FILE* peFile);
+int locate64(PE64FILE* peFile, _DWORD VA);
+_DWORD resolve64(PE64FILE* peFile, _DWORD VA, int index);
+void ParseDOSHeader64(PE64FILE* peFile);
+void PrintDOSHeaderInfo64(PE64FILE* peFile);
+void ParseRichHeader64(PE64FILE* peFile);
+void PrintRichHeaderInfo64(PE64FILE* peFile);
+void ParseNTHeaders64(PE64FILE* peFile);
+void PrintNTHeadersInfo64(PE64FILE* peFile);
+void ParseSectionHeaders64(PE64FILE * peFile);
+void PrintSectionHeadersInfo64(PE64FILE * peFile);
+void ParseImportDirectory64(PE64FILE * peFile);
+void PrintImportTableInfo64(PE64FILE * peFile);
+void ParseBaseReloc64(PE64FILE * peFile);
+void PrintBaseRelocationsInfo64(PE64FILE * peFile);
+_DWORD align(_DWORD size, _DWORD alignment);
+void AddNewSection64(
+    PE64FILE* peFile, 
+    const char* newSectionName, 
+    _DWORD sizeOfRawData, 
+    const void* sectionData, 
+    int sectionType
+);
+void WriteModifiedPEFile64(
+    PE64FILE* peFile, 
+    const char* newFileName, 
+    char* sectionData, 
+    _DWORD sizeOfRawData
+);
+#endif

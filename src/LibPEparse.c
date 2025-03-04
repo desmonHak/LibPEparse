@@ -68,7 +68,7 @@ void ParseFile64(PE64FILE* peFile) {
 	ParseBaseReloc64(peFile);
 }
 
-int locate64(PE64FILE* peFile, DWORD VA) {
+int locate64(PE64FILE* peFile, _DWORD VA) {
 	int index;
 	
 	for (int i = 0; i < peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS; i++) {
@@ -83,7 +83,7 @@ int locate64(PE64FILE* peFile, DWORD VA) {
 	return index;
 }
 
-DWORD resolve64(PE64FILE* peFile, DWORD VA, int index) {
+_DWORD resolve64(PE64FILE* peFile, _DWORD VA, int index) {
 	return (VA - peFile->PEFILE_SECTION_HEADERS[index].VirtualAddress) 
         + peFile->PEFILE_SECTION_HEADERS[index].PointerToRawData;
 }
@@ -91,7 +91,7 @@ DWORD resolve64(PE64FILE* peFile, DWORD VA, int index) {
 int INITPARSE(FILE* PpeFile) {
 
 	___IMAGE_DOS_HEADER TMP_DOS_HEADER;
-	WORD PEFILE_TYPE;
+	_WORD PEFILE_TYPE;
 
 	fseek(PpeFile, 0, SEEK_SET);
 	fread(&TMP_DOS_HEADER, sizeof(___IMAGE_DOS_HEADER), 1, PpeFile);
@@ -101,8 +101,8 @@ int INITPARSE(FILE* PpeFile) {
 		return 1;
 	}
 
-	fseek(PpeFile, (TMP_DOS_HEADER.e_lfanew + sizeof(DWORD) + sizeof(___IMAGE_FILE_HEADER)), SEEK_SET);
-	fread(&PEFILE_TYPE, sizeof(WORD), 1, PpeFile);
+	fseek(PpeFile, (TMP_DOS_HEADER.e_lfanew + sizeof(_DWORD) + sizeof(___IMAGE_FILE_HEADER)), SEEK_SET);
+	fread(&PEFILE_TYPE, sizeof(_WORD), 1, PpeFile);
 
 	if (PEFILE_TYPE == ___IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
 		return 32;
@@ -214,9 +214,9 @@ void ParseRichHeader64(PE64FILE* peFile) {
 
     // Analizar las entradas del encabezado Rich
     for (int i = 16; i < RichHeaderSize; i += 8) {
-        WORD PRODID = (WORD)((unsigned char)RichHeaderPtr[i + 3] << 8 | (unsigned char)RichHeaderPtr[i + 2]);
-        WORD BUILDID = (WORD)((unsigned char)RichHeaderPtr[i + 1] << 8 | (unsigned char)RichHeaderPtr[i]);
-        DWORD USECOUNT = (DWORD)((unsigned char)RichHeaderPtr[i + 7] << 24 | (unsigned char)RichHeaderPtr[i + 6] << 16 |
+        _WORD PRODID = (_WORD)((unsigned char)RichHeaderPtr[i + 3] << 8 | (unsigned char)RichHeaderPtr[i + 2]);
+        _WORD BUILDID = (_WORD)((unsigned char)RichHeaderPtr[i + 1] << 8 | (unsigned char)RichHeaderPtr[i]);
+        _DWORD USECOUNT = (_DWORD)((unsigned char)RichHeaderPtr[i + 7] << 24 | (unsigned char)RichHeaderPtr[i + 6] << 16 |
                                  (unsigned char)RichHeaderPtr[i + 5] << 8 | (unsigned char)RichHeaderPtr[i + 4]);
         peFile->PEFILE_RICH_HEADER.entries[(i / 8) - 2].prodID = PRODID;
         peFile->PEFILE_RICH_HEADER.entries[(i / 8) - 2].buildID = BUILDID;
@@ -443,7 +443,7 @@ void PrintSectionHeadersInfo64(PE64FILE * peFile) {
 
 void ParseImportDirectory64(PE64FILE * peFile) {
 	
-	DWORD _import_directory_address = resolve64(
+	_DWORD _import_directory_address = resolve64(
         peFile, peFile->PEFILE_IMPORT_DIRECTORY.VirtualAddress, 
         locate64(peFile, peFile->PEFILE_IMPORT_DIRECTORY.VirtualAddress)
     );
@@ -482,7 +482,7 @@ void PrintImportTableInfo64(PE64FILE * peFile) {
     printf(" ----------------\n\n");
 
     for (int i = 0; i < peFile->_import_directory_count; i++) {
-        DWORD NameAddr = resolve64(peFile, 
+        _DWORD NameAddr = resolve64(peFile, 
             peFile->PEFILE_IMPORT_TABLE[i].Name, 
             locate64(peFile, peFile->PEFILE_IMPORT_TABLE[i].Name)
         );
@@ -518,7 +518,7 @@ void PrintImportTableInfo64(PE64FILE * peFile) {
 
         printf("\n");
 
-        DWORD ILTAddr = resolve64(peFile,
+        _DWORD ILTAddr = resolve64(peFile,
             peFile->PEFILE_IMPORT_TABLE[i].DUMMYUNIONNAME__.OriginalFirstThunk, 
             locate64(peFile,peFile->PEFILE_IMPORT_TABLE[i].DUMMYUNIONNAME__.OriginalFirstThunk));
         int entrycounter = 0;
@@ -527,12 +527,12 @@ void PrintImportTableInfo64(PE64FILE * peFile) {
 
             ILT_ENTRY_64 entry;
 
-            fseek(peFile->Ppefile, (ILTAddr + (entrycounter * sizeof(QWORD))), SEEK_SET);
+            fseek(peFile->Ppefile, (ILTAddr + (entrycounter * sizeof(_QWORD))), SEEK_SET);
             fread(&entry, sizeof(ILT_ENTRY_64), 1, peFile->Ppefile);
 
-            BYTE flag = entry.ORDINAL_NAME_FLAG;
-            DWORD HintRVA = 0x0;
-            WORD ordinal = 0x0;
+            _BYTE flag = entry.ORDINAL_NAME_FLAG;
+            _DWORD HintRVA = 0x0;
+            _WORD ordinal = 0x0;
 
             if (flag == 0x0) {
                 HintRVA = entry.FIELD_2.HINT_NAME_TABE;
@@ -550,7 +550,7 @@ void PrintImportTableInfo64(PE64FILE * peFile) {
             if (flag == 0x0) {
                 ___IMAGE_IMPORT_BY_NAME hint;
 
-                DWORD HintAddr = resolve64(peFile, HintRVA, locate64(peFile, HintRVA));
+                _DWORD HintAddr = resolve64(peFile, HintRVA, locate64(peFile, HintRVA));
                 fseek(peFile->Ppefile, HintAddr, SEEK_SET);
                 fread(&hint, sizeof(___IMAGE_IMPORT_BY_NAME), 1, peFile->Ppefile);
                 printf("         Name: %s\n", hint.Name);
@@ -580,7 +580,7 @@ void ParseBaseReloc64(PE64FILE * peFile) {
         return;
     }
     
-    DWORD _basereloc_directory_address = resolve64(peFile, 
+    _DWORD _basereloc_directory_address = resolve64(peFile, 
         peFile->PEFILE_BASERELOC_DIRECTORY.VirtualAddress, 
         locate64(peFile, peFile->PEFILE_BASERELOC_DIRECTORY.VirtualAddress)
     );
@@ -638,7 +638,7 @@ void PrintBaseRelocationsInfo64(PE64FILE * peFile) {
 
 	for (int i = 0; i < peFile->_basreloc_directory_count; i++) {
 
-		DWORD PAGERVA, BLOCKSIZE, BASE_RELOC_ADDR;
+		_DWORD PAGERVA, BLOCKSIZE, BASE_RELOC_ADDR;
 		int ENTRIES;
 
 		BASE_RELOC_ADDR = resolve64(peFile,
@@ -675,23 +675,23 @@ void PrintBaseRelocationsInfo64(PE64FILE * peFile) {
 
 }
 
-DWORD align(DWORD size, DWORD alignment) {
+_DWORD align(_DWORD size, _DWORD alignment) {
     if (alignment == 0) return size;
     return (size + alignment - 1) & ~(alignment - 1);
 }
 
-void AddNewSection64(PE64FILE* peFile, const char* newSectionName, DWORD sizeOfRawData, const void* sectionData, int sectionType) {
+void AddNewSection64(PE64FILE* peFile, const char* newSectionName, _DWORD sizeOfRawData, const void* sectionData, int sectionType) {
     // 0. Get the File and Section Alignment
-    DWORD sectionAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.SectionAlignment;
-    DWORD fileAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.FileAlignment;
+    _DWORD sectionAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.SectionAlignment;
+    _DWORD fileAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.FileAlignment;
 
     // 1.  Calculate aligned sizes
-    DWORD alignedVirtualSize = align(sizeOfRawData, sectionAlignment);
-    DWORD alignedSizeOfRawData = align(sizeOfRawData, fileAlignment);
+    _DWORD alignedVirtualSize = align(sizeOfRawData, sectionAlignment);
+    _DWORD alignedSizeOfRawData = align(sizeOfRawData, fileAlignment);
 
     // 2. Calculate the position of the new section
-    DWORD lastSectionEnd = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
-    DWORD lastRawDataEnd = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
+    _DWORD lastSectionEnd = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
+    _DWORD lastRawDataEnd = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
 
     if (peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections > 0) {
         // Find the last section with actual raw data
@@ -708,8 +708,8 @@ void AddNewSection64(PE64FILE* peFile, const char* newSectionName, DWORD sizeOfR
     }
 
     // Align the calculated values
-    DWORD newSectionVirtualAddress = align(lastSectionEnd, sectionAlignment);
-    DWORD newSectionPointerToRawData = align(lastRawDataEnd, fileAlignment);
+    _DWORD newSectionVirtualAddress = align(lastSectionEnd, sectionAlignment);
+    _DWORD newSectionPointerToRawData = align(lastRawDataEnd, fileAlignment);
  
     // Ensure the new section doesn't overlap with headers
      if (newSectionPointerToRawData < peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders) {
@@ -767,15 +767,15 @@ void AddNewSection64(PE64FILE* peFile, const char* newSectionName, DWORD sizeOfR
     peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_IMAGE = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfImage;
 }
 
-void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sectionData, DWORD sizeOfRawData) {
+void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sectionData, _DWORD sizeOfRawData) {
     FILE* newFile = fopen(newFileName, "wb");
     if (newFile == NULL) {
         printf("Error creating the new file.\n");
         return;
     }
 
-    DWORD fileAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.FileAlignment;
-    DWORD sizeOfHeaders = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
+    _DWORD fileAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.FileAlignment;
+    _DWORD sizeOfHeaders = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
 
     // 1. Write DOS Header
     fwrite(&peFile->PEFILE_DOS_HEADER, sizeof(___IMAGE_DOS_HEADER), 1, newFile);
@@ -800,9 +800,9 @@ void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sect
            peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections, newFile);
 
     // Pad headers to SizeOfHeaders
-    DWORD currentOffset = ftell(newFile);
+    _DWORD currentOffset = ftell(newFile);
     if (currentOffset < sizeOfHeaders) {
-        DWORD paddingSize = sizeOfHeaders - currentOffset;
+        _DWORD paddingSize = sizeOfHeaders - currentOffset;
         char* padding = (char*)calloc(1, paddingSize);
         if (!padding) {
             fclose(newFile);
@@ -813,11 +813,11 @@ void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sect
     }
 
     // 5. Copy Section Data
-    DWORD lastSectionEnd = 0;
+    _DWORD lastSectionEnd = 0;
     for (int i = 0; i < peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections; i++) {
         ___IMAGE_SECTION_HEADER* sectionHeader = &peFile->PEFILE_SECTION_HEADERS[i];
-        DWORD rawDataSize = sectionHeader->SizeOfRawData;
-        DWORD rawDataPtr = sectionHeader->PointerToRawData;
+        _DWORD rawDataSize = sectionHeader->SizeOfRawData;
+        _DWORD rawDataPtr = sectionHeader->PointerToRawData;
 
         if (rawDataPtr == 0 || rawDataSize == 0) {
             // Skip uninitialized data sections
@@ -842,7 +842,7 @@ void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sect
         } else {
             // New section
             fwrite(sectionData, sizeOfRawData, 1, newFile);
-            DWORD paddingSize = rawDataSize - sizeOfRawData;
+            _DWORD paddingSize = rawDataSize - sizeOfRawData;
             if (paddingSize > 0) {
                 char* padding = (char*)calloc(1, paddingSize);
                 if (!padding) {
@@ -858,9 +858,9 @@ void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sect
     }
 
     // Ensure the file size is a multiple of FileAlignment
-    DWORD currentFileSize = ftell(newFile);
-    DWORD alignedFileSize = (currentFileSize + fileAlignment - 1) & ~(fileAlignment - 1);
-    DWORD finalPaddingSize = alignedFileSize - currentFileSize;
+    _DWORD currentFileSize = ftell(newFile);
+    _DWORD alignedFileSize = (currentFileSize + fileAlignment - 1) & ~(fileAlignment - 1);
+    _DWORD finalPaddingSize = alignedFileSize - currentFileSize;
 
     if (finalPaddingSize > 0) {
         char* padding = (char*)calloc(1, finalPaddingSize);

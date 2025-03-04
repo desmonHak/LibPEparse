@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 
     // Añadir una nueva sección
     char newSectionData[] = "Esto es una nueva sección";
-    DWORD newSectionSize = sizeof(newSectionData);
+    _DWORD newSectionSize = sizeof(newSectionData);
     AddNewSection64(file, ".newsec1", newSectionSize, newSectionData, SECTION_TYPE_CODE);
 
     // Escribir el archivo PE modificado

@@ -1,5 +1,12 @@
 #include  "./src/LibCOFFparse.c"
 
+/*
+ * gcc coff2.c -o coff2.exe
+ * coff2.exe
+ * gcc coff2linked.c add.obj -o coff2addlinker.exe
+ * coff2addlinker.exe
+*/
+
 int main() {
     // 1. Define COFF Header
     COFF_HEADER header = {

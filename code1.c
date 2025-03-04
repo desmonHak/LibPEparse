@@ -20,7 +20,7 @@ typedef struct {
 
 // Prototipos de funciones
 void initializePE64File(PE64FILE_struct* pe);
-void addSection(PE64FILE_struct* pe, const char* name, DWORD characteristics, BYTE* data, DWORD dataSize);
+void addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, BYTE* data, _DWORD dataSize);
 void finalizePE64File(PE64FILE_struct* pe);
 void writePE64File(PE64FILE_struct* pe, const char* filename);
 void freePE64File(PE64FILE_struct* pe);
@@ -63,7 +63,7 @@ void initializePE64File(PE64FILE_struct* pe) {
     pe->ntHeaders.OptionalHeader.SizeOfHeaders = 0x400; // Valor inicial mayor
 }
 
-void addSection(PE64FILE_struct* pe, const char* name, DWORD characteristics, BYTE* data, DWORD dataSize) {
+void addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, BYTE* data, _DWORD dataSize) {
     pe->numberOfSections++;
     pe->sectionHeaders = realloc(pe->sectionHeaders, pe->numberOfSections * sizeof(IMAGE_SECTION_HEADER));
     pe->sectionData = realloc(pe->sectionData, pe->numberOfSections * sizeof(BYTE*));
@@ -136,7 +136,7 @@ void writePE64File(PE64FILE_struct* pe, const char* filename) {
     fwrite(pe->sectionHeaders, sizeof(IMAGE_SECTION_HEADER), pe->numberOfSections, fileHandle);
 
     // Rellenar los headers
-    DWORD headerPadding = pe->ntHeaders.OptionalHeader.SizeOfHeaders -
+    _DWORD headerPadding = pe->ntHeaders.OptionalHeader.SizeOfHeaders -
                           (sizeof(IMAGE_DOS_HEADER) + sizeof(IMAGE_NT_HEADERS64) +
                            (pe->numberOfSections * sizeof(IMAGE_SECTION_HEADER)));
 
@@ -194,14 +194,14 @@ int main() {
 
     // Preparación de la sección .idata
     // Se asume que .idata será la segunda sección
-    DWORD idataSectionRVA = SECT_ALIGN * 2;  // 0x2000
-    DWORD importLookupTableRVA = sizeof(IMAGE_IMPORT_DESCRIPTOR) * 2;  // Reservar espacio para descriptor + terminador
-    DWORD importAddressTableRVA = importLookupTableRVA + sizeof(ULONGLONG) * 2;
-    DWORD hintNameTableRVA = importAddressTableRVA + sizeof(ULONGLONG) * 2;
-    DWORD dllNameRVA = hintNameTableRVA + sizeof(WORD) + strlen("ExitProcess") + 1;
+    _DWORD idataSectionRVA = SECT_ALIGN * 2;  // 0x2000
+    _DWORD importLookupTableRVA = sizeof(IMAGE_IMPORT_DESCRIPTOR) * 2;  // Reservar espacio para descriptor + terminador
+    _DWORD importAddressTableRVA = importLookupTableRVA + sizeof(_QWORD) * 2;
+    _DWORD hintNameTableRVA = importAddressTableRVA + sizeof(_QWORD) * 2;
+    _DWORD dllNameRVA = hintNameTableRVA + sizeof(WORD) + strlen("ExitProcess") + 1;
     
     BYTE idataSectionData[1024] = {0};
-    DWORD offset = 0;
+    _DWORD offset = 0;
 
     // Import Directory Table
     IMAGE_IMPORT_DESCRIPTOR importDescriptor = {0};
@@ -218,20 +218,20 @@ int main() {
     offset += sizeof(IMAGE_IMPORT_DESCRIPTOR);
 
     // Import Lookup Table (ILT)
-    ULONGLONG iltEntry = idataSectionRVA + hintNameTableRVA;
-    memcpy(idataSectionData + offset, &iltEntry, sizeof(ULONGLONG));
-    offset += sizeof(ULONGLONG);
+    _QWORD iltEntry = idataSectionRVA + hintNameTableRVA;
+    memcpy(idataSectionData + offset, &iltEntry, sizeof(_QWORD));
+    offset += sizeof(_QWORD);
     // Terminador nulo para ILT
-    ULONGLONG nullEntry = 0;
-    memcpy(idataSectionData + offset, &nullEntry, sizeof(ULONGLONG));
-    offset += sizeof(ULONGLONG);
+    _QWORD nullEntry = 0;
+    memcpy(idataSectionData + offset, &nullEntry, sizeof(_QWORD));
+    offset += sizeof(_QWORD);
 
     // Import Address Table (IAT) - inicialmente igual a ILT
-    memcpy(idataSectionData + offset, &iltEntry, sizeof(ULONGLONG));
-    offset += sizeof(ULONGLONG);
+    memcpy(idataSectionData + offset, &iltEntry, sizeof(_QWORD));
+    offset += sizeof(_QWORD);
     // Terminador nulo para IAT
-    memcpy(idataSectionData + offset, &nullEntry, sizeof(ULONGLONG));
-    offset += sizeof(ULONGLONG);
+    memcpy(idataSectionData + offset, &nullEntry, sizeof(_QWORD));
+    offset += sizeof(_QWORD);
 
     // Hint/Name Table
     WORD hint = 0;
@@ -248,7 +248,7 @@ int main() {
     pe.ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress = idataSectionRVA;
     pe.ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size = sizeof(IMAGE_IMPORT_DESCRIPTOR) * 2;
     pe.ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IAT].VirtualAddress = idataSectionRVA + importAddressTableRVA;
-    pe.ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IAT].Size = sizeof(ULONGLONG) * 2;    
+    pe.ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IAT].Size = sizeof(_QWORD) * 2;    
 
     // Agregar la sección .idata
     addSection(&pe, ".idata", IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,
@@ -259,11 +259,11 @@ int main() {
     // los 4 bytes de desplazamiento están en offset 13.
     // RIP después de la instrucción call = SECT_ALIGN + 17.
     // IAT (donde se encuentra la dirección de ExitProcess) = idataSectionRVA + importAddressTableRVA.
-    DWORD textBase = SECT_ALIGN;                // 0x1000
-    DWORD callRIP = textBase + 17;                // RIP tras call (0x1000 + 17)
-    DWORD iatAddress = idataSectionRVA + importAddressTableRVA;  // Por ejemplo, 0x2000 + 56
-    DWORD callDisp = iatAddress - callRIP;         // disp32 = IAT - (base + 17)
-    memcpy(pe.sectionData[0] + 13, &callDisp, sizeof(DWORD));
+    _DWORD textBase = SECT_ALIGN;                // 0x1000
+    _DWORD callRIP = textBase + 17;                // RIP tras call (0x1000 + 17)
+    _DWORD iatAddress = idataSectionRVA + importAddressTableRVA;  // Por ejemplo, 0x2000 + 56
+    _DWORD callDisp = iatAddress - callRIP;         // disp32 = IAT - (base + 17)
+    memcpy(pe.sectionData[0] + 13, &callDisp, sizeof(_DWORD));
 
     // Establecer AddressOfEntryPoint
     pe.ntHeaders.OptionalHeader.AddressOfEntryPoint = SECT_ALIGN;

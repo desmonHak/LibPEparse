@@ -12,35 +12,48 @@ int create_coff_file(const char* filename, COFF_HEADER* header, SECTION_HEADER* 
         return 1;
     }
 
-    // Write COFF Header
+    // Write COFF header
     fwrite(header, 1, sizeof(COFF_HEADER), file);
 
-    // Write Section Headers
+    // Write section headers
     fwrite(sections, 1, sizeof(SECTION_HEADER) * numSections, file);
 
-    // Write Section Data with proper alignment
+    // Write section data and padding
     for (int i = 0; i < numSections; i++) {
         fseek(file, sections[i].PointerToRawData, SEEK_SET);
         fwrite(newSections[i].data.data, 1, newSections[i].data.size, file);
-        
-        // Pad the section to align with SizeOfRawData
-        uint32_t padding = sections[i].SizeOfRawData - newSections[i].data.size;
-        char* padBuffer = calloc(padding, 1);
-        fwrite(padBuffer, 1, padding, file);
-        free(padBuffer);
+
+        // Pad the section with zeros to SizeOfRawData
+        uint32_t paddingSize = sections[i].SizeOfRawData - newSections[i].data.size;
+        char* padding = calloc(1, paddingSize);  // Initialize padding with zeros
+        fwrite(padding, 1, paddingSize, file);
+        free(padding);
     }
 
-    // Write Symbol Table
+    // Write relocations
+    for (int i = 0; i < numSections; i++) {
+        if (newSections[i].numRelocations > 0) {
+            fseek(file, sections[i].PointerToRelocations, SEEK_SET);
+            fwrite(newSections[i].relocations, 1, newSections[i].numRelocations * sizeof(RELOCATION), file);
+        }
+    }
+
+    // Write symbol table
     fseek(file, header->PointerToSymbolTable, SEEK_SET);
     fwrite(symbols, 1, sizeof(COFF_SYMBOL) * numSymbols, file);
 
-    // Write String Table
+    // Write string table
+    fseek(file, header->PointerToSymbolTable + sizeof(COFF_SYMBOL) * numSymbols, SEEK_SET);
     fwrite(&stringTableSize, 1, sizeof(uint32_t), file);
-    fwrite(stringTable, 1, stringTableSize, file);
+    fwrite(stringTable + 4, 1, stringTableSize - 4, file);
 
     fclose(file);
     return 0;
 }
+
+
+
+
 
 
 void print_coff_header(COFF_HEADER *header) {
@@ -63,7 +76,6 @@ void print_coff_header(COFF_HEADER *header) {
     printf("\n");
 }
 
-// Function to print section header information
 void print_section_header(SECTION_HEADER *section) {
     printf("Section Header:\n");
     printf("  Name: %.8s\n", section->Name);
@@ -77,7 +89,6 @@ void print_section_header(SECTION_HEADER *section) {
     printf("  Number of Line Numbers: %d\n", section->NumberOfLinenumbers);
     printf("  Characteristics: 0x%08X ", section->Characteristics);
 
-    // More detailed output about section characteristics
     if (section->Characteristics & 0x00000020) printf("(Contains executable code) ");
     if (section->Characteristics & 0x40000000) printf("(Initialized data) ");
     if (section->Characteristics & 0x80000000) printf("(Uninitialized data) ");
@@ -86,8 +97,6 @@ void print_section_header(SECTION_HEADER *section) {
     printf("\n");
 }
 
-
-// Function to print symbol table entry information
 void print_symbol(COFF_SYMBOL *symbol, char *string_table) {
     printf("Symbol:\n");
     if (symbol->Name.ShortName[0] == 0) {
@@ -108,7 +117,6 @@ void print_symbol(COFF_SYMBOL *symbol, char *string_table) {
     printf("  Number of Aux Symbols: %d\n", symbol->NumberOfAuxSymbols);
 }
 
-// Function to read section raw data and output some bytes as code preview
 void print_section_code_preview(FILE *file, SECTION_HEADER *section) {
     if (section->SizeOfRawData > 0) {
         printf("Code Preview (first 32 bytes):\n");
@@ -129,5 +137,146 @@ void print_section_code_preview(FILE *file, SECTION_HEADER *section) {
         free(buffer);
     } else {
         printf("Section has no raw data.\n");
+    }
+}
+
+NewSection create_section(const char* name, uint32_t characteristics, const void* data, size_t size, RELOCATION* relocations, int numRelocations) {
+    NewSection section;
+    strncpy(section.name, name, 8);
+    section.name[8] = '\0';
+    section.characteristics = characteristics;
+    section.data.size = size;
+    section.data.data = malloc(size);
+    memcpy(section.data.data, data, size);
+    section.relocations = relocations;
+    section.numRelocations = numRelocations;
+    return section;
+}
+
+COFF_SYMBOL create_symbol(const char* name, uint32_t value, int16_t section_number, uint16_t type, uint8_t storage_class) {
+    COFF_SYMBOL symbol = {0};
+    if (strlen(name) > 8) {
+        symbol.Name.LongName.Zero = 0;
+        // Offset en la tabla de strings se ajustará al escribir
+        symbol.Name.LongName.Offset = 4;  // inicio de los nombres en la tabla
+    } else {
+        strncpy(symbol.Name.ShortName, name, 8);
+        symbol.Name.ShortName[8] = '\0'; // Ensure null termination
+    }
+    symbol.Value = value;
+    symbol.SectionNumber = section_number;
+    symbol.Type = type;
+    symbol.StorageClass = storage_class;
+    symbol.NumberOfAuxSymbols = 0;
+    return symbol;
+}
+
+
+void setup_sections(SECTION_HEADER* sections, NewSection* newSections, int num_sections) {
+    uint32_t current_offset = align(sizeof(COFF_HEADER) + num_sections * sizeof(SECTION_HEADER), 16);
+    uint32_t current_virtual_address = 0x1000;  // Dirección virtual base
+
+    for (int i = 0; i < num_sections; i++) {
+        strncpy(sections[i].Name, newSections[i].name, 8);
+        sections[i].Name[8] = '\0'; // Ensure null termination
+        sections[i].VirtualSize = newSections[i].data.size;
+        sections[i].VirtualAddress = current_virtual_address;
+        sections[i].SizeOfRawData = align(newSections[i].data.size, 16);
+        sections[i].PointerToRawData = align(current_offset, 16);  // Asegura alineación de 16 bytes
+        sections[i].PointerToRelocations = current_offset + sections[i].SizeOfRawData;
+        sections[i].PointerToLinenumbers = 0;
+        sections[i].NumberOfRelocations = newSections[i].numRelocations;
+        sections[i].NumberOfLinenumbers = 0;
+        sections[i].Characteristics = newSections[i].characteristics;
+        current_offset = align(sections[i].PointerToRelocations + newSections[i].numRelocations * sizeof(RELOCATION), 16);
+        current_virtual_address += align(newSections[i].data.size, 16); // Incrementa la dirección virtual
+    }
+}
+
+
+RELOCATION create_relocation(uint32_t offset, uint32_t symbol_index, uint16_t type) {
+    RELOCATION reloc;
+    reloc.VirtualAddress = offset;
+    reloc.SymbolTableIndex = symbol_index;
+    reloc.Type = type;
+    return reloc;
+}
+
+void add_relocation(NewSection* section, RELOCATION reloc) {
+    if (section->relocations == NULL) {
+        section->relocations = malloc(sizeof(RELOCATION));
+        if (!section->relocations) {
+            perror("Failed to allocate memory for relocation");
+            exit(1);
+        }
+        section->relocations[0] = reloc;
+        section->numRelocations = 1;
+    } else {
+        section->relocations = realloc(section->relocations, (section->numRelocations + 1) * sizeof(RELOCATION));
+        if (!section->relocations) {
+            perror("Failed to reallocate memory for relocation");
+            exit(1);
+        }
+        section->relocations[section->numRelocations] = reloc;
+        section->numRelocations++;
+    }
+}
+
+
+void print_relocation(RELOCATION *reloc) {
+    printf("Relocation:\n");
+    printf("  Virtual Address: 0x%08X\n", reloc->VirtualAddress);
+    printf("  Symbol Table Index: %d\n", reloc->SymbolTableIndex);
+    printf("  Type: 0x%04X\n", reloc->Type);
+}
+
+void print_coff_info(COFF_HEADER *header, SECTION_HEADER *sections, NewSection *newSections, COFF_SYMBOL *symbols, char *stringTable, uint32_t stringTableSize) {
+    print_coff_header(header);
+    
+    for (int i = 0; i < header->NumberOfSections; i++) {
+        printf("\n");
+        print_section_header(&sections[i]);
+        printf("Section Data:\n");
+        for (size_t j = 0; j < newSections[i].data.size; j++) {
+            printf("%02X ", (unsigned char)newSections[i].data.data[j]);
+            if ((j + 1) % 16 == 0) printf("\n");
+        }
+        printf("\n");
+        
+        for (int j = 0; j < newSections[i].numRelocations; j++) {
+            print_relocation(&newSections[i].relocations[j]);
+        }
+    }
+    
+    printf("\nSymbols:\n");
+    for (uint32_t i = 0; i < header->NumberOfSymbols; i++) {
+        print_symbol(&symbols[i], stringTable);
+    }
+    
+    printf("\nString Table:\n");
+    for (uint32_t i = 4; i < stringTableSize; i++) {
+        if (stringTable[i] == '\0') {
+            printf("\\0");
+        } else {
+            printf("%c", stringTable[i]);
+        }
+    }
+    printf("\n");
+}
+uint32_t calculate_symbol_table_offset(SECTION_HEADER* section_headers, int num_sections) {
+    uint32_t offset = sizeof(COFF_HEADER) + num_sections * sizeof(SECTION_HEADER);
+    for (int i = 0; i < num_sections; ++i) {
+        offset = align(offset, 16);
+        offset += section_headers[i].SizeOfRawData;
+        offset = align(offset, 16);
+        offset += section_headers[i].NumberOfRelocations * sizeof(RELOCATION);
+    }
+    return offset;
+}
+
+void cleanup_resources(NewSection* sections, int num_sections) {
+    for (int i = 0; i < num_sections; ++i) {
+        if (sections[i].relocations) free(sections[i].relocations);
+        free(sections[i].data.data);
     }
 }
