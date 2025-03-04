@@ -1,11 +1,16 @@
-#include "../include/LibCOFFparse.h"
+#include "LibCOFFparse.h"
 
-// --- Utility Functions ---
-uint32_t align(uint32_t value, uint32_t alignment) {
-    return ((value + alignment - 1) / alignment) * alignment;
-}
-
-int create_coff_file(const char* filename, COFF_HEADER* header, SECTION_HEADER* sections, NewSection* newSections, int numSections, COFF_SYMBOL* symbols, uint32_t numSymbols, char* stringTable, uint32_t stringTableSize) {
+int create_coff_file(
+    const char* filename, 
+    COFF_HEADER* header, 
+    SECTION_HEADER* sections, 
+    NewSection* newSections, 
+    int numSections, 
+    COFF_SYMBOL* symbols, 
+    uint32_t numSymbols, 
+    char* stringTable, 
+    uint32_t stringTableSize
+) {
     FILE* file = fopen(filename, "wb");
     if (!file) {
         perror("Error opening file for writing");
@@ -230,7 +235,14 @@ void print_relocation(RELOCATION *reloc) {
     printf("  Type: 0x%04X\n", reloc->Type);
 }
 
-void print_coff_info(COFF_HEADER *header, SECTION_HEADER *sections, NewSection *newSections, COFF_SYMBOL *symbols, char *stringTable, uint32_t stringTableSize) {
+void print_coff_info(
+    COFF_HEADER *header, 
+    SECTION_HEADER *sections, 
+    NewSection *newSections, 
+    COFF_SYMBOL *symbols, 
+    char *stringTable, 
+    uint32_t stringTableSize
+) {
     print_coff_header(header);
     
     for (int i = 0; i < header->NumberOfSections; i++) {

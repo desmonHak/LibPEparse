@@ -1,4 +1,4 @@
-#include "./src/LibPEparse.c"
+#include "LibPEparse.h"
 
 int main(int argc, char **argv) {
     if (argc < 2) {

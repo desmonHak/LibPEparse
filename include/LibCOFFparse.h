@@ -1,3 +1,8 @@
+#ifndef LIB_COFF_PARSE_H
+#define LIB_COFF_PARSE_H
+
+#include "LibPEparse.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -111,5 +116,49 @@ typedef struct {
     #define IMAGE_SCN_CNT_UNINITIALIZED_DATA    0x00000080
     #define IMAGE_SCN_MEM_DISCARDABLE           0x02000000
 
-    
-    
+    int create_coff_file(
+        const char* filename, 
+        COFF_HEADER* header, 
+        SECTION_HEADER* sections, 
+        NewSection* newSections, 
+        int numSections, 
+        COFF_SYMBOL* symbols, 
+        uint32_t numSymbols, 
+        char* stringTable, 
+        uint32_t stringTableSize
+    );
+
+    void print_coff_header(COFF_HEADER *header);
+    void print_section_header(SECTION_HEADER *section);
+    void print_symbol(COFF_SYMBOL *symbol, char *string_table);
+    void print_section_code_preview(FILE *file, SECTION_HEADER *section);
+    void print_relocation(RELOCATION *reloc);
+    void print_coff_info(
+        COFF_HEADER *header, 
+        SECTION_HEADER *sections, 
+        NewSection *newSections, 
+        COFF_SYMBOL *symbols, 
+        char *stringTable, 
+        uint32_t stringTableSize
+    );
+    NewSection create_section(
+        const char* name, 
+        uint32_t characteristics, 
+        const void* data, 
+        size_t size, 
+        RELOCATION* relocations, 
+        int numRelocations
+    );
+    COFF_SYMBOL create_symbol(
+        const char* name, 
+        uint32_t value, 
+        int16_t section_number, 
+        uint16_t type, 
+        uint8_t storage_class
+    );
+    void setup_sections(SECTION_HEADER* sections, NewSection* newSections, int num_sections);
+    RELOCATION create_relocation(uint32_t offset, uint32_t symbol_index, uint16_t type);
+    void add_relocation(NewSection* section, RELOCATION reloc);
+    uint32_t calculate_symbol_table_offset(SECTION_HEADER* section_headers, int num_sections);
+    void cleanup_resources(NewSection* sections, int num_sections);
+#endif

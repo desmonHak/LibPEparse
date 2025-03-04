@@ -1,4 +1,4 @@
-#include  "./src/LibCOFFparse.c"
+#include  "LibCOFFparse.h"
 
 /*
  * gcc coff2.c -o coff2.exe
@@ -79,7 +79,10 @@ int main() {
     header.PointerToSymbolTable = sections[0].PointerToRawData + sections[0].SizeOfRawData;
 
     // 6. Write COFF File
-    create_coff_file("add.obj", &header, sections, newSections, header.NumberOfSections, symbols, header.NumberOfSymbols, stringTable, stringTableSize);
+    create_coff_file(
+        "add.obj", &header, sections, 
+        newSections, header.NumberOfSections, symbols, 
+        header.NumberOfSymbols, stringTable, stringTableSize);
 
     return 0;
 }

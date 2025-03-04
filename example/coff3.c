@@ -1,4 +1,4 @@
-#include  "./src/LibCOFFparse.c"
+#include  "LibCOFFparse.h"
 // gcc coff3.c -o coff3.exe
 // coff3.exe
 // objdump -s -j .data add.obj

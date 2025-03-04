@@ -3,7 +3,7 @@
 #include <string.h>
 #include <windows.h>
 
-#include "./src/LibPEparse.c"
+#include "LibPEparse.h"
 
 #define IMAGE_BASE 0x400000
 #define SECT_ALIGN 0x1000
@@ -11,16 +11,16 @@
 
 // Structure definitions for PE elements
 typedef struct {
-    IMAGE_DOS_HEADER dosHeader;
-    IMAGE_NT_HEADERS64 ntHeaders;
-    IMAGE_SECTION_HEADER* sectionHeaders;
-    BYTE** sectionData;
+    ___IMAGE_DOS_HEADER dosHeader;
+    ___IMAGE_NT_HEADERS64 ntHeaders;
+    ___IMAGE_SECTION_HEADER* sectionHeaders;
+    _BYTE** sectionData;
     int numberOfSections;
 } PE64FILE_struct;
 
 // Prototipos de funciones
 void initializePE64File(PE64FILE_struct* pe);
-void addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, BYTE* data, _DWORD dataSize);
+void addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, _BYTE* data, _DWORD dataSize);
 void finalizePE64File(PE64FILE_struct* pe);
 void writePE64File(PE64FILE_struct* pe, const char* filename);
 void freePE64File(PE64FILE_struct* pe);
@@ -31,7 +31,7 @@ void initializePE64File(PE64FILE_struct* pe) {
 
     // DOS Header
     pe->dosHeader.e_magic = IMAGE_DOS_SIGNATURE;
-    pe->dosHeader.e_lfanew = sizeof(IMAGE_DOS_HEADER);
+    pe->dosHeader.e_lfanew = sizeof(___IMAGE_DOS_HEADER);
 
     // NT Headers
     pe->ntHeaders.Signature = IMAGE_NT_SIGNATURE;
@@ -63,13 +63,13 @@ void initializePE64File(PE64FILE_struct* pe) {
     pe->ntHeaders.OptionalHeader.SizeOfHeaders = 0x400; // Valor inicial mayor
 }
 
-void addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, BYTE* data, _DWORD dataSize) {
+void addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, _BYTE* data, _DWORD dataSize) {
     pe->numberOfSections++;
-    pe->sectionHeaders = realloc(pe->sectionHeaders, pe->numberOfSections * sizeof(IMAGE_SECTION_HEADER));
-    pe->sectionData = realloc(pe->sectionData, pe->numberOfSections * sizeof(BYTE*));
+    pe->sectionHeaders = realloc(pe->sectionHeaders, pe->numberOfSections * sizeof(___IMAGE_SECTION_HEADER));
+    pe->sectionData = realloc(pe->sectionData, pe->numberOfSections * sizeof(_BYTE*));
 
-    IMAGE_SECTION_HEADER* newSection = &pe->sectionHeaders[pe->numberOfSections - 1];
-    memset(newSection, 0, sizeof(IMAGE_SECTION_HEADER));
+    ___IMAGE_SECTION_HEADER* newSection = &pe->sectionHeaders[pe->numberOfSections - 1];
+    memset(newSection, 0, sizeof(___IMAGE_SECTION_HEADER));
     strncpy((char*)newSection->Name, name, IMAGE_SIZEOF_SHORT_NAME);
 
     newSection->Misc.VirtualSize = dataSize;
@@ -87,8 +87,8 @@ void addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, B
 
     // Calcular PointerToRawData
     if (pe->numberOfSections == 1) {
-        newSection->PointerToRawData = align(sizeof(IMAGE_DOS_HEADER) + sizeof(IMAGE_NT_HEADERS64) +
-                                             (pe->numberOfSections * sizeof(IMAGE_SECTION_HEADER)),
+        newSection->PointerToRawData = align(sizeof(___IMAGE_DOS_HEADER) + sizeof(___IMAGE_NT_HEADERS64) +
+                                             (pe->numberOfSections * sizeof(___IMAGE_SECTION_HEADER)),
                                              pe->ntHeaders.OptionalHeader.FileAlignment);
     } else {
         newSection->PointerToRawData = align(pe->sectionHeaders[pe->numberOfSections - 2].PointerToRawData +
@@ -108,8 +108,8 @@ void addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, B
 }
 
 void finalizePE64File(PE64FILE_struct* pe) {
-    pe->ntHeaders.OptionalHeader.SizeOfHeaders = align(sizeof(IMAGE_DOS_HEADER) + sizeof(IMAGE_NT_HEADERS64) +
-                                                 (pe->numberOfSections * sizeof(IMAGE_SECTION_HEADER)), FILE_ALIGN);
+    pe->ntHeaders.OptionalHeader.SizeOfHeaders = align(sizeof(___IMAGE_DOS_HEADER) + sizeof(___IMAGE_NT_HEADERS64) +
+                                                 (pe->numberOfSections * sizeof(___IMAGE_SECTION_HEADER)), FILE_ALIGN);
     pe->ntHeaders.OptionalHeader.AddressOfEntryPoint = pe->sectionHeaders[0].VirtualAddress;
     pe->ntHeaders.OptionalHeader.BaseOfCode = pe->sectionHeaders[0].VirtualAddress;
 
@@ -131,16 +131,16 @@ void writePE64File(PE64FILE_struct* pe, const char* filename) {
         return;
     }
 
-    fwrite(&pe->dosHeader, sizeof(IMAGE_DOS_HEADER), 1, fileHandle);
-    fwrite(&pe->ntHeaders, sizeof(IMAGE_NT_HEADERS64), 1, fileHandle);
-    fwrite(pe->sectionHeaders, sizeof(IMAGE_SECTION_HEADER), pe->numberOfSections, fileHandle);
+    fwrite(&pe->dosHeader, sizeof(___IMAGE_DOS_HEADER), 1, fileHandle);
+    fwrite(&pe->ntHeaders, sizeof(___IMAGE_NT_HEADERS64), 1, fileHandle);
+    fwrite(pe->sectionHeaders, sizeof(___IMAGE_SECTION_HEADER), pe->numberOfSections, fileHandle);
 
     // Rellenar los headers
     _DWORD headerPadding = pe->ntHeaders.OptionalHeader.SizeOfHeaders -
-                          (sizeof(IMAGE_DOS_HEADER) + sizeof(IMAGE_NT_HEADERS64) +
-                           (pe->numberOfSections * sizeof(IMAGE_SECTION_HEADER)));
+                          (sizeof(___IMAGE_DOS_HEADER) + sizeof(___IMAGE_NT_HEADERS64) +
+                           (pe->numberOfSections * sizeof(___IMAGE_SECTION_HEADER)));
 
-    BYTE* padding = calloc(1, headerPadding);
+    _BYTE* padding = calloc(1, headerPadding);
     fwrite(padding, 1, headerPadding, fileHandle);
     free(padding);
 
@@ -182,7 +182,7 @@ int main() {
     */
 
     // Sección .text: contiene código que realiza un call indirecto a ExitProcess
-    BYTE textSectionData[] = {
+    _BYTE textSectionData[] = {
         0x48, 0x83, 0xEC, 0x28,                   // sub rsp, 40h
         0x48, 0xC7, 0xC1, 0x2A, 0x00, 0x00, 0x00,   // mov rcx, 42
         0xFF, 0x15, 0x00, 0x00, 0x00, 0x00,         // call [RIP+disp32] (disp32 a corregir)
@@ -200,7 +200,7 @@ int main() {
     _DWORD hintNameTableRVA = importAddressTableRVA + sizeof(_QWORD) * 2;
     _DWORD dllNameRVA = hintNameTableRVA + sizeof(WORD) + strlen("ExitProcess") + 1;
     
-    BYTE idataSectionData[1024] = {0};
+    _BYTE idataSectionData[1024] = {0};
     _DWORD offset = 0;
 
     // Import Directory Table

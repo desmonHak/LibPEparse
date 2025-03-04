@@ -1,4 +1,4 @@
-#include  "./src/LibCOFFparse.c"
+#include  "LibCOFFparse.h"
 
 int main() {
     // --- Example Usage ---

@@ -1,5 +1,4 @@
-#include "../include/LibPEparse.h"
-#include <stdlib.h>
+#include "LibPEparse.h"
 
 // Nueva función para inicializar la estructura PE64FILE
 void PE64FILE_Initialize(PE64FILE* peFile) {
@@ -69,23 +68,19 @@ void ParseFile64(PE64FILE* peFile) {
 }
 
 int locate64(PE64FILE* peFile, _DWORD VA) {
-	int index;
-	
-	for (int i = 0; i < peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS; i++) {
-		if (VA >= peFile->PEFILE_SECTION_HEADERS[i].VirtualAddress
-			&& VA < (
-                peFile->PEFILE_SECTION_HEADERS[i].VirtualAddress + 
-                peFile->PEFILE_SECTION_HEADERS[i].Misc.VirtualSize)){
-			index = i;
-			break;
-		}
-	}
-	return index;
+    for (int i = 0; i < peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS; i++) {
+        _DWORD sectionVA = peFile->PEFILE_SECTION_HEADERS[i].VirtualAddress;
+        _DWORD sectionSize = peFile->PEFILE_SECTION_HEADERS[i].Misc.VirtualSize;
+        if (VA >= sectionVA && VA < (sectionVA + sectionSize))
+            return i;
+    }
+    return -1;  // No se encontró la sección
 }
-
 _DWORD resolve64(PE64FILE* peFile, _DWORD VA, int index) {
-	return (VA - peFile->PEFILE_SECTION_HEADERS[index].VirtualAddress) 
-        + peFile->PEFILE_SECTION_HEADERS[index].PointerToRawData;
+    if (index < 0 || index >= peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS)
+        return 0;
+    return (VA - peFile->PEFILE_SECTION_HEADERS[index].VirtualAddress)
+           + peFile->PEFILE_SECTION_HEADERS[index].PointerToRawData;
 }
 
 int INITPARSE(FILE* PpeFile) {
@@ -157,7 +152,7 @@ void ParseRichHeader64(PE64FILE* peFile) {
     // Si no se encuentra el encabezado "Rich", salir de la función
     if (index_ == -1) {
         printf("Encabezado 'Rich' no encontrado.\n");
-        peFile->PEFILE_RICH_HEADER_INFO.entries = NULL;
+        peFile->PEFILE_RICH_HEADER_INFO.entries = 0;
         free(dataPtr);
         return;
     }
@@ -216,8 +211,9 @@ void ParseRichHeader64(PE64FILE* peFile) {
     for (int i = 16; i < RichHeaderSize; i += 8) {
         _WORD PRODID = (_WORD)((unsigned char)RichHeaderPtr[i + 3] << 8 | (unsigned char)RichHeaderPtr[i + 2]);
         _WORD BUILDID = (_WORD)((unsigned char)RichHeaderPtr[i + 1] << 8 | (unsigned char)RichHeaderPtr[i]);
-        _DWORD USECOUNT = (_DWORD)((unsigned char)RichHeaderPtr[i + 7] << 24 | (unsigned char)RichHeaderPtr[i + 6] << 16 |
-                                 (unsigned char)RichHeaderPtr[i + 5] << 8 | (unsigned char)RichHeaderPtr[i + 4]);
+        _DWORD USECOUNT = (_DWORD)((unsigned char)RichHeaderPtr[i + 7] << 24 | 
+                                (unsigned char)RichHeaderPtr[i + 6] << 16 |
+                                (unsigned char)RichHeaderPtr[i + 5] << 8 | (unsigned char)RichHeaderPtr[i + 4]);
         peFile->PEFILE_RICH_HEADER.entries[(i / 8) - 2].prodID = PRODID;
         peFile->PEFILE_RICH_HEADER.entries[(i / 8) - 2].buildID = BUILDID;
         peFile->PEFILE_RICH_HEADER.entries[(i / 8) - 2].useCount = USECOUNT;
@@ -625,54 +621,54 @@ void ParseBaseReloc64(PE64FILE * peFile) {
 }
 
 
-void PrintBaseRelocationsInfo64(PE64FILE * peFile) {
-	
-	if (peFile == NULL) return;
-    if (peFile->PEFILE_BASERELOC_TABLE == NULL) return;
-    if (peFile->_basreloc_directory_count == 0) return;
+void PrintBaseRelocationsInfo64(PE64FILE *peFile) {
+    if (!peFile || !peFile->PEFILE_BASERELOC_TABLE || peFile->_basreloc_directory_count == 0)
+        return;
     
     printf(" BASE RELOCATIONS TABLE:\n");
-	printf(" -----------------------\n");
+    printf(" -----------------------\n");
 
-	int szCounter = sizeof(___IMAGE_BASE_RELOCATION);
+    for (int i = 0; i < peFile->_basreloc_directory_count; i++) {
+        // Usamos el RVA del bloque actual en lugar de un valor global
+        _DWORD blockRVA   = peFile->PEFILE_BASERELOC_TABLE[i].VirtualAddress;
+        _DWORD blockSize  = peFile->PEFILE_BASERELOC_TABLE[i].SizeOfBlock;
+        int entries       = (blockSize - sizeof(___IMAGE_BASE_RELOCATION)) / sizeof(_WORD);
+        
+        // Determinamos en qué sección se encuentra este bloque
+        int sectionIndex = locate64(peFile, blockRVA);
+        if (sectionIndex == -1) {
+            printf("  [Error] No se encontró sección para RVA 0x%X\n", blockRVA);
+            continue;
+        }
+        _DWORD blockFileOffset = resolve64(peFile, blockRVA, sectionIndex);
+        
+        printf("\n   Block %d: \n", i);
+        printf("     Block RVA: 0x%X\n", blockRVA);
+        printf("     Block size: 0x%X\n", blockSize);
+        printf("     Number of entries: %d\n", entries);
+        printf("     Entries:\n");
 
-	for (int i = 0; i < peFile->_basreloc_directory_count; i++) {
-
-		_DWORD PAGERVA, BLOCKSIZE, BASE_RELOC_ADDR;
-		int ENTRIES;
-
-		BASE_RELOC_ADDR = resolve64(peFile,
-            peFile->PEFILE_BASERELOC_DIRECTORY.VirtualAddress, 
-            locate64(peFile, peFile->PEFILE_BASERELOC_DIRECTORY.VirtualAddress)
-        );
-		PAGERVA = peFile->PEFILE_BASERELOC_TABLE[i].VirtualAddress;
-		BLOCKSIZE = peFile->PEFILE_BASERELOC_TABLE[i].SizeOfBlock;
-		ENTRIES = (BLOCKSIZE - sizeof(___IMAGE_BASE_RELOCATION)) / sizeof(WORD);
-
-		printf("\n   Block 0x%X: \n", i);
-		printf("     Page RVA: 0x%X\n", PAGERVA);
-		printf("     Block size: 0x%X\n", BLOCKSIZE);
-		printf("     Number of entries: 0x%X\n", ENTRIES);
-		printf("\n     Entries:\n");
-
-		for (int j = 0; j < ENTRIES; j++) {
-
-			BASE_RELOC_ENTRY entry;
-
-			int offset = (BASE_RELOC_ADDR + szCounter + (j * sizeof(WORD)));
-
-			fseek(peFile->Ppefile, offset, SEEK_SET);
-			fread(&entry, sizeof(WORD), 1, peFile->Ppefile);
-
-			printf("\n       * Value: 0x%X\n", entry);
-			printf("         Relocation Type: 0x%X\n", entry.TYPE);
-			printf("         Offset: 0x%X\n", entry.OFFSET);
-
-		}
-		printf("\n   ----------------------\n\n");
-		szCounter += BLOCKSIZE;
-	}
-
+        // Las entradas comienzan justo después de la cabecera del bloque
+        _DWORD entryFileOffset = blockFileOffset + sizeof(___IMAGE_BASE_RELOCATION);
+        for (int j = 0; j < entries; j++) {
+            _WORD value;
+            int curOffset = entryFileOffset + (j * sizeof(_WORD));
+            
+            fseek(peFile->Ppefile, curOffset, SEEK_SET);
+            if (fread(&value, sizeof(_WORD), 1, peFile->Ppefile) != 1) {
+                printf("  [Error] Falló la lectura de la entrada %d del bloque %d\n", j, i);
+                break;
+            }
+            // Extraemos el tipo (4 bits altos) y el offset (12 bits bajos)
+            int relocType = (value >> 12) & 0xF;
+            int relocOffset = value & 0xFFF;
+            
+            printf("\n       * Value: 0x%X\n", value);
+            printf("         Relocation Type: 0x%X\n", relocType);
+            printf("         Offset: 0x%X\n", relocOffset);
+        }
+        printf("\n   ----------------------\n\n");
+    }
 }
 
 _DWORD align(_DWORD size, _DWORD alignment) {
@@ -680,7 +676,10 @@ _DWORD align(_DWORD size, _DWORD alignment) {
     return (size + alignment - 1) & ~(alignment - 1);
 }
 
-void AddNewSection64(PE64FILE* peFile, const char* newSectionName, _DWORD sizeOfRawData, const void* sectionData, int sectionType) {
+void AddNewSection64(
+    PE64FILE* peFile, 
+    const char* newSectionName, _DWORD sizeOfRawData, 
+    const void* sectionData, int sectionType) {
     // 0. Get the File and Section Alignment
     _DWORD sectionAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.SectionAlignment;
     _DWORD fileAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.FileAlignment;
@@ -703,7 +702,8 @@ void AddNewSection64(PE64FILE* peFile, const char* newSectionName, _DWORD sizeOf
             }
         }
         // Use the last section's end position for virtual address calculation
-        ___IMAGE_SECTION_HEADER* lastSection = &peFile->PEFILE_SECTION_HEADERS[peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections - 1];
+        ___IMAGE_SECTION_HEADER* lastSection = &peFile->PEFILE_SECTION_HEADERS[
+            peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections - 1];
         lastSectionEnd = lastSection->VirtualAddress + lastSection->Misc.VirtualSize;
     }
 
@@ -724,22 +724,22 @@ void AddNewSection64(PE64FILE* peFile, const char* newSectionName, _DWORD sizeOf
     newSection.SizeOfRawData = align(sizeOfRawData, fileAlignment); // Ensure SizeOfRawData is aligned
     newSection.VirtualAddress = newSectionVirtualAddress;
     newSection.PointerToRawData = newSectionPointerToRawData;
-    newSection.Characteristics = IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE | IMAGE_SCN_CNT_INITIALIZED_DATA;
+    newSection.Characteristics = ___IMAGE_SCN_MEM_READ | ___IMAGE_SCN_MEM_WRITE | ___IMAGE_SCN_CNT_INITIALIZED_DATA;
 
     //3.5. Update the characteristics based on section type
     switch (sectionType) {
         case SECTION_TYPE_CODE:
-            newSection.Characteristics |= IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE;
+            newSection.Characteristics |= ___IMAGE_SCN_CNT_CODE | ___IMAGE_SCN_MEM_EXECUTE;
             break;
         case SECTION_TYPE_INITIALIZED_DATA:
-            newSection.Characteristics |= IMAGE_SCN_CNT_INITIALIZED_DATA;
+            newSection.Characteristics |= ___IMAGE_SCN_CNT_INITIALIZED_DATA;
             break;
         case SECTION_TYPE_UNINITIALIZED_DATA:
-            newSection.Characteristics |= IMAGE_SCN_CNT_UNINITIALIZED_DATA;
+            newSection.Characteristics |= ___IMAGE_SCN_CNT_UNINITIALIZED_DATA;
             break;
         default:
             //If there is no section type specified it uses the default data.
-            newSection.Characteristics |= IMAGE_SCN_CNT_INITIALIZED_DATA;
+            newSection.Characteristics |= ___IMAGE_SCN_CNT_INITIALIZED_DATA;
             break;
     }
 
@@ -748,7 +748,8 @@ void AddNewSection64(PE64FILE* peFile, const char* newSectionName, _DWORD sizeOf
         peFile->PEFILE_SECTION_HEADERS = (___PIMAGE_SECTION_HEADER)malloc(sizeof(___IMAGE_SECTION_HEADER));
     } else {
         peFile->PEFILE_SECTION_HEADERS = realloc(peFile->PEFILE_SECTION_HEADERS,
-                                                 sizeof(___IMAGE_SECTION_HEADER) * (peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections + 1));
+                                                 sizeof(___IMAGE_SECTION_HEADER) * 
+                                                 (peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections + 1));
     }
     if (peFile->PEFILE_SECTION_HEADERS == NULL) {
         fprintf(stderr, "Error reallocating section headers.\n");
@@ -763,7 +764,8 @@ void AddNewSection64(PE64FILE* peFile, const char* newSectionName, _DWORD sizeOf
     peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS = peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections;
 
     // 7. Update SizeOfImage
-    peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfImage = align(newSectionVirtualAddress + alignedVirtualSize, sectionAlignment);
+    peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfImage = align(
+        newSectionVirtualAddress + alignedVirtualSize, sectionAlignment);
     peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_IMAGE = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfImage;
 }
 
