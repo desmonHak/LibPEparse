@@ -1,5 +1,7 @@
 #include  "LibCOFFparse.h"
 
+#include <time.h>
+
 /*
  * gcc coff2.c -o coff2.exe
  * coff2.exe

@@ -1,5 +1,7 @@
 #include "LibPEparse.h"
 
+#include <string.h>
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <pe_file_path>\n", argv[0]);
@@ -15,6 +17,7 @@ int main(int argc, char **argv) {
     printf("pe_file path: %s\n", argv[1]);
     PE64FILE *file = PE64FILE_Create("programa.exe", pe_file_path);
 
+
     // Añadir una nueva sección
     char newSectionData[] = "Esto es una nueva sección";
     _DWORD newSectionSize = sizeof(newSectionData);
@@ -26,10 +29,19 @@ int main(int argc, char **argv) {
     AddNewSection64(file, ".newsec2", newSectionSize, newSectionData, SECTION_TYPE_CODE);
     WriteModifiedPEFile64(file, "nuevo_archivo.exe", ".newsec2", newSectionSize);
     PE64FILE_PrintInfo64(file);
+    printf("Liberando datos asociados al archivo\n");
     PE64FILE_Destroy(file);
+    file = NULL;
+    printf("cerrando el archivo\n");
+    fclose(pe_file_path);
+    pe_file_path = NULL;
 
-    memset(file, 0, sizeof(PE64FILE));
+
+    printf("Creando un archivo .exe vacio de pruebas");
     file = PE64FILE_Create("nuevo_archivo.exe", pe_file_path);
+    if (file == NULL) {
+        puts("Error al crear el archivo ""nuevo_archivo.exe");
+    }
     PE64FILE_PrintInfo64(file);
     PE64FILE_Destroy(file);
 

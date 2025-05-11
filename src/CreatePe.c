@@ -1,5 +1,6 @@
 #include "CreatePe.h"
 
+#include <string.h>
 
 // Inicializa la estructura PE con headers mínimos
 void initializePE64File(PE64FILE_struct* pe) {

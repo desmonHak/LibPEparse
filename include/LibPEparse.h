@@ -4,12 +4,9 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 
 #include <stdlib.h>
-#include <errno.h>
-#include <time.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
+
 
 typedef uint8_t                 _BYTE;
 typedef uint16_t                _WORD;
@@ -190,6 +187,50 @@ typedef unsigned long long _ULONGLONG;
 #define ___IMAGE_DLLCHARACTERISTICS_WDM_DRIVER 0x2000
 #define ___IMAGE_DLLCHARACTERISTICS_GUARD_CF 0x4000
 #define ___IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE 0x8000
+
+
+#ifndef UNALIGNED
+    #if defined(_MSC_VER)
+        #if defined(__ia64__) || defined(__x86_64__)
+            #define UNALIGNED __unaligned
+        #else
+            #define UNALIGNED
+        #endif
+    #else
+        // creo que es este es su equivalente para compiladores no mingw32:
+        #define UNALIGNED __attribute__((packed))
+    #endif
+#endif /* UNALIGNED */
+
+#ifdef __WIDL__
+#  define __MINGW_EXTENSION
+#else
+#  if defined(__GNUC__) || defined(__GNUG__)
+#    define __MINGW_EXTENSION __extension__
+#  else
+#    define __MINGW_EXTENSION
+#  endif
+#endif /* __WIDL__ */
+
+/* Special case nameless struct/union.  */
+#ifndef __C89_NAMELESS
+#  define __C89_NAMELESS __MINGW_EXTENSION
+#  define __C89_NAMELESSSTRUCTNAME
+#  define __C89_NAMELESSSTRUCTNAME1
+#  define __C89_NAMELESSSTRUCTNAME2
+#  define __C89_NAMELESSSTRUCTNAME3
+#  define __C89_NAMELESSSTRUCTNAME4
+#  define __C89_NAMELESSSTRUCTNAME5
+#  define __C89_NAMELESSUNIONNAME
+#  define __C89_NAMELESSUNIONNAME1
+#  define __C89_NAMELESSUNIONNAME2
+#  define __C89_NAMELESSUNIONNAME3
+#  define __C89_NAMELESSUNIONNAME4
+#  define __C89_NAMELESSUNIONNAME5
+#  define __C89_NAMELESSUNIONNAME6
+#  define __C89_NAMELESSUNIONNAME7
+#  define __C89_NAMELESSUNIONNAME8
+#endif
 
 #pragma pack(push)
 typedef struct __IMAGE_DOS_HEADER {      // DOS .EXE header

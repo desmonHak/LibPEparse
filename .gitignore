@@ -6,3 +6,4 @@
 *.obj
 src/add_section_example.c
 code1.asm
+*.elf

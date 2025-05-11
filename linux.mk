@@ -1,4 +1,4 @@
-TARGET 		 = LibPEparse_c
+TARGET 		 = libPEparse_c
 RM 			 = rm
 RMFLAGS 	 = -f -v
 EXTENSION 	 = elf

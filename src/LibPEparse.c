@@ -1,4 +1,10 @@
+#ifndef LIB_PE_PARSE_C
+#define LIB_PE_PARSE_C
+
 #include "LibPEparse.h"
+
+#include <string.h>
+#include <stdbool.h>
 
 // Nueva función para inicializar la estructura PE64FILE
 void PE64FILE_Initialize(PE64FILE* peFile) {
@@ -7,7 +13,9 @@ void PE64FILE_Initialize(PE64FILE* peFile) {
 }
 
 PE64FILE* PE64FILE_Create(char* _NAME, FILE* Ppefile) {
-    PE64FILE* peFile = (PE64FILE*)malloc(sizeof(PE64FILE));
+    PE64FILE* peFile = calloc(sizeof(PE64FILE), 1);
+	printf("peFile=%p, _NAME=%p, Ppefile=%p\n", peFile, _NAME, Ppefile);
+
     if (peFile != NULL) {
         PE64FILE_Initialize(peFile); // Inicializar la estructura
         peFile->NAME = _NAME;
@@ -17,57 +25,107 @@ PE64FILE* PE64FILE_Create(char* _NAME, FILE* Ppefile) {
     return peFile;
 }
 
+/**
+ * @brief Permite liberar la memoria asociada a un PE64FILE. El programador
+ * es responsable de cerrar el archivo almacenado en peFile->Ppefile usando
+ * fclose.
+ * 
+ * @param peFile 
+ */
 void PE64FILE_Destroy(PE64FILE* peFile) {
     if (peFile != NULL) {
         //Free rich header
         if (peFile->PEFILE_RICH_HEADER_INFO.ptrToBuffer != NULL){
             free(peFile->PEFILE_RICH_HEADER_INFO.ptrToBuffer);
+            peFile->PEFILE_RICH_HEADER_INFO.ptrToBuffer = NULL;
         }
         if (peFile->PEFILE_RICH_HEADER.entries != NULL){
             free(peFile->PEFILE_RICH_HEADER.entries);
+            peFile->PEFILE_RICH_HEADER.entries = NULL;
         }
         if (peFile->PEFILE_SECTION_HEADERS != NULL){
             free(peFile->PEFILE_SECTION_HEADERS);
+            peFile->PEFILE_SECTION_HEADERS = NULL;
         }
-
-        fclose(peFile->Ppefile);
+        /*
+        // esto debe hacerlo el usuario:
+        if (peFile->Ppefile != NULL){
+            fclose(peFile->Ppefile);
+            peFile->Ppefile = NULL;
+        }*/
         free(peFile);
     }
 }
 
 void PE64FILE_PrintInfo64(PE64FILE* peFile) {
     if (peFile != NULL) {
+        printf("PrintDOSHeaderInfo64=%p\n", peFile);
         PrintDOSHeaderInfo64(peFile);
+
+        printf("PrintRichHeaderInfo64=%p\n", peFile);
         PrintRichHeaderInfo64(peFile);
+
+        printf("PrintNTHeadersInfo64=%p\n", peFile);
         PrintNTHeadersInfo64(peFile);
+
+        printf("PrintSectionHeadersInfo64=%p\n", peFile);
         PrintSectionHeadersInfo64(peFile);
+
+        printf("PrintImportTableInfo64=%p\n", peFile);
         PrintImportTableInfo64(peFile);
+
+        printf("PrintBaseRelocationsInfo64=%p\n", peFile);
         PrintBaseRelocationsInfo64(peFile);
     }
 }
 
 void ParseFile64(PE64FILE* peFile) {
 
+    if (peFile) {
+        printf("ParseFile64 -> peFile == NULL\n");
+        return;
+    }
+
+    printf("peFile=%p\n", peFile);
 	// PARSE DOS HEADER
 	ParseDOSHeader64(peFile);
+    printf("a=%p\n", 1);
 
+    printf("peFile=%p\n", peFile);
 	// PARSE RICH HEADER
 	ParseRichHeader64(peFile);
+    printf("a=%p\n", 2);
 
+    printf("peFile=%p\n", peFile);
 	//PARSE NT HEADERS
 	ParseNTHeaders64(peFile);
+    printf("a=%p\n", 3);
 
+    printf("peFile=%p\n", peFile);
 	// PARSE SECTION HEADERS
 	ParseSectionHeaders64(peFile);
+    printf("a=%p\n", 4);
 
+    printf("peFile=%p\n", peFile);
 	// PARSE IMPORT DIRECTORY
 	ParseImportDirectory64(peFile);
+    printf("a=%p\n", 5);
 
+    printf("peFile=%p\n", peFile);
 	// PARSE BASE RELOCATIONS
 	ParseBaseReloc64(peFile);
+    printf("a=%p\n", 6);
 }
 
 int locate64(PE64FILE* peFile, _DWORD VA) {
+    if (peFile == NULL) {
+        printf("locate64 -> peFile == NULL\n");
+        return -2;
+    }
+    if (peFile == NULL) {
+        printf("locate64 -> peFile->PEFILE_SECTION_HEADERS == NULL\n");
+        return -3;
+    }
     for (int i = 0; i < peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS; i++) {
         _DWORD sectionVA = peFile->PEFILE_SECTION_HEADERS[i].VirtualAddress;
         _DWORD sectionSize = peFile->PEFILE_SECTION_HEADERS[i].Misc.VirtualSize;
@@ -77,6 +135,14 @@ int locate64(PE64FILE* peFile, _DWORD VA) {
     return -1;  // No se encontró la sección
 }
 _DWORD resolve64(PE64FILE* peFile, _DWORD VA, int index) {
+    if (peFile == NULL) {
+        printf("resolve64 -> peFile == NULL\n");
+        return 0;
+    }
+    if (peFile->PEFILE_SECTION_HEADERS == NULL) {
+        printf("resolve64 -> peFile->PEFILE_SECTION_HEADERS == NULL\n");
+        return 0;
+    }
     if (index < 0 || index >= peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS)
         return 0;
     return (VA - peFile->PEFILE_SECTION_HEADERS[index].VirtualAddress)
@@ -112,6 +178,14 @@ int INITPARSE(FILE* PpeFile) {
 
 }
 void ParseDOSHeader64(PE64FILE* peFile) {
+    if (peFile) {
+        printf("ParseDOSHeader64 -> peFile == NULL\n");
+        return;
+    }
+    if (peFile->Ppefile) {
+        printf("ParseDOSHeader64 -> peFile->Ppefile == NULL\n");
+        return;
+    }
 	fseek(peFile->Ppefile, 0, SEEK_SET);
 	fread(&(peFile->PEFILE_DOS_HEADER), sizeof(___IMAGE_DOS_HEADER), 1, peFile->Ppefile);
 
@@ -129,6 +203,20 @@ void PrintDOSHeaderInfo64(PE64FILE* peFile) {
 }
 
 void ParseRichHeader64(PE64FILE* peFile) {
+    if (peFile == NULL) {
+        printf("ParseRichHeader64 -> peFile == NULL\n");
+        return;
+    }
+    // Validar que el tamaño sea razonable
+    if (peFile->PEFILE_DOS_HEADER_LFANEW < 0x40) {
+        printf("ParseRichHeader64 -> e_lfanew demasiado pequeño (%X), no es válido.\n", peFile->PEFILE_DOS_HEADER_LFANEW);
+        return;
+    }
+    if (peFile->Ppefile == NULL) {
+        printf("ParseRichHeader64 -> peFile->Ppefile == NULL\n");
+        return;
+    }
+
     // Reservar memoria para leer hasta el e_lfanew
     char* dataPtr = malloc(peFile->PEFILE_DOS_HEADER_LFANEW);
     if (dataPtr == NULL) {
@@ -138,11 +226,18 @@ void ParseRichHeader64(PE64FILE* peFile) {
 
     // Posicionar el puntero del archivo al inicio y leer hasta e_lfanew
     fseek(peFile->Ppefile, 0, SEEK_SET);
-    fread(dataPtr, peFile->PEFILE_DOS_HEADER_LFANEW, 1, peFile->Ppefile);
+    size_t bytesRead = fread(dataPtr, 1, peFile->PEFILE_DOS_HEADER_LFANEW, peFile->Ppefile);
+    if (bytesRead != peFile->PEFILE_DOS_HEADER_LFANEW) {
+        printf("No se pudo leer el buffer completo del archivo.\n");
+        free(dataPtr);
+        return;
+    }
 
     // Buscar la cadena "Rich" en el buffer leído
     int index_ = -1;
-    for (int i = 0; i <= peFile->PEFILE_DOS_HEADER_LFANEW - 4; i++) {
+    int searchLimit = peFile->PEFILE_DOS_HEADER_LFANEW - 4;
+    if (searchLimit < 0) searchLimit = 0;
+    for (int i = 0; i <= searchLimit; i++) {
         if (memcmp(dataPtr + i, "Rich", 4) == 0) {
             index_ = i;
             break;
@@ -158,6 +253,11 @@ void ParseRichHeader64(PE64FILE* peFile) {
     }
 
     // Obtener la clave XOR ubicada después de la cadena "Rich"
+    if (index_ + 8 > peFile->PEFILE_DOS_HEADER_LFANEW) {
+        printf("No hay suficiente espacio para la clave XOR.\n");
+        free(dataPtr);
+        return;
+    }
     char key[4];
     memcpy(key, dataPtr + index_ + 4, 4);
 
@@ -165,6 +265,11 @@ void ParseRichHeader64(PE64FILE* peFile) {
     int indexpointer = index_ - 4;
     int RichHeaderSize = 0;
     while (indexpointer >= 0) {
+        if (indexpointer + 4 > peFile->PEFILE_DOS_HEADER_LFANEW) {
+            printf("Desbordamiento al buscar DanS.\n");
+            free(dataPtr);
+            return;
+        }
         char tmpchar[4];
         memcpy(tmpchar, dataPtr + indexpointer, 4);
         for (int i = 0; i < 4; i++) {
@@ -175,6 +280,12 @@ void ParseRichHeader64(PE64FILE* peFile) {
         if (tmpchar[0] == 'D' && tmpchar[1] == 'a') {
             break;
         }
+    }
+
+    if (index_ - RichHeaderSize < 0) {
+        printf("Tamaño de RichHeader inválido.\n");
+        free(dataPtr);
+        return;
     }
 
     // Leer el encabezado Rich completo
@@ -191,16 +302,26 @@ void ParseRichHeader64(PE64FILE* peFile) {
         RichHeaderPtr[i] ^= key[i % 4];
     }
 
+	int numEntries = (RichHeaderSize - 16) / 8;
+    if (numEntries <= 0 || numEntries > 10000) { // límite arbitrario de seguridad
+        printf("Cantidad inválida de entradas Rich: %d\n", numEntries);
+        free(RichHeaderPtr);
+        free(dataPtr);
+        return;
+    }
+
     // Almacenar la información del encabezado Rich en la estructura peFile
     peFile->PEFILE_RICH_HEADER_INFO.size = RichHeaderSize;
     peFile->PEFILE_RICH_HEADER_INFO.ptrToBuffer = RichHeaderPtr;
-    peFile->PEFILE_RICH_HEADER_INFO.entries = (RichHeaderSize - 16) / 8;
+    peFile->PEFILE_RICH_HEADER_INFO.entries = numEntries;
+
 
     // Liberar el buffer temporal
     free(dataPtr);
 
     // Reservar memoria para las entradas del encabezado Rich
-    peFile->PEFILE_RICH_HEADER.entries = malloc(sizeof(RICH_HEADER_ENTRY) * peFile->PEFILE_RICH_HEADER_INFO.entries);
+    peFile->PEFILE_RICH_HEADER.entries = malloc(
+    	sizeof(RICH_HEADER_ENTRY) * numEntries);
     if (peFile->PEFILE_RICH_HEADER.entries == NULL) {
         printf("Error al asignar memoria para las entradas del encabezado Rich.\n");
         free(RichHeaderPtr);
@@ -226,13 +347,14 @@ void ParseRichHeader64(PE64FILE* peFile) {
     }
 
     // Liberar el buffer del encabezado Rich
-    free(peFile->PEFILE_RICH_HEADER_INFO.ptrToBuffer);
+    //free(peFile->PEFILE_RICH_HEADER_INFO.ptrToBuffer);
 }
 
 
 void PrintRichHeaderInfo64(PE64FILE* peFile) {
 	
     if (peFile == NULL || peFile->PEFILE_RICH_HEADER_INFO.size == 0) {
+        printf("PrintRichHeaderInfo64 -> peFile == NULL\n");
         return;
     }
 	printf(" RICH HEADER:\n");
@@ -251,71 +373,82 @@ void PrintRichHeaderInfo64(PE64FILE* peFile) {
 }
 
 void ParseNTHeaders64(PE64FILE* peFile) {
-	fseek(peFile->Ppefile, peFile->PEFILE_DOS_HEADER.e_lfanew, SEEK_SET);
-	fread(&(peFile->PEFILE_NT_HEADERS), sizeof(peFile->PEFILE_NT_HEADERS), 1, peFile->Ppefile);
+    if (peFile == NULL) {
+        printf("ParseNTHeaders64 -> peFile == NULL\n");
+        return;
+    }
 
-	peFile->PEFILE_NT_HEADERS_SIGNATURE = peFile->PEFILE_NT_HEADERS.Signature;
+    if (peFile->Ppefile == NULL) {
+        printf("ParseNTHeaders64 -> peFile->Ppefile == NULL\n");
+        return;
+    } else {
+        fseek(peFile->Ppefile, peFile->PEFILE_DOS_HEADER.e_lfanew, SEEK_SET);
+        fread(&(peFile->PEFILE_NT_HEADERS), sizeof(peFile->PEFILE_NT_HEADERS), 1, peFile->Ppefile);
+    
 
-	peFile->PEFILE_NT_HEADERS_FILE_HEADER_MACHINE = 
-        peFile->PEFILE_NT_HEADERS.FileHeader.Machine;
-	peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS = 
-        peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections;
-	peFile->PEFILE_NT_HEADERS_FILE_HEADER_SIZEOF_OPTIONAL_HEADER = 
-        peFile->PEFILE_NT_HEADERS.FileHeader.SizeOfOptionalHeader;
+        peFile->PEFILE_NT_HEADERS_SIGNATURE = peFile->PEFILE_NT_HEADERS.Signature;
 
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_MAGIC 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.Magic;
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_CODE 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfCode;
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_INITIALIZED_DATA 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfInitializedData;
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_UNINITIALIZED_DATA 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfUninitializedData;
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_ADDRESS_OF_ENTRYPOINT 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint;
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_BASE_OF_CODE 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.BaseOfCode;
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_IMAGEBASE 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.ImageBase;
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SECTION_ALIGNMENT 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.SectionAlignment;
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_FILE_ALIGNMENT 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.FileAlignment;
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_IMAGE 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfImage;
-	peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_HEADERS 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
+        peFile->PEFILE_NT_HEADERS_FILE_HEADER_MACHINE = 
+            peFile->PEFILE_NT_HEADERS.FileHeader.Machine;
+        peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS = 
+            peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections;
+        peFile->PEFILE_NT_HEADERS_FILE_HEADER_SIZEOF_OPTIONAL_HEADER = 
+            peFile->PEFILE_NT_HEADERS.FileHeader.SizeOfOptionalHeader;
 
-	peFile->PEFILE_EXPORT_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_EXPORT];
-	peFile->PEFILE_IMPORT_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_IMPORT];
-	peFile->PEFILE_RESOURCE_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_RESOURCE];
-	peFile->PEFILE_EXCEPTION_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_EXCEPTION];
-	peFile->PEFILE_SECURITY_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_SECURITY];
-	peFile->PEFILE_BASERELOC_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_BASERELOC];
-	peFile->PEFILE_DEBUG_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_DEBUG];
-	peFile->PEFILE_ARCHITECTURE_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_ARCHITECTURE];
-	peFile->PEFILE_GLOBALPTR_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_GLOBALPTR];
-	peFile->PEFILE_TLS_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_TLS];
-	peFile->PEFILE_LOAD_CONFIG_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG];
-	peFile->PEFILE_BOUND_IMPORT_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT];
-	peFile->PEFILE_IAT_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_IAT];
-	peFile->PEFILE_DELAY_IMPORT_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT];
-	peFile->PEFILE_COM_DESCRIPTOR_DIRECTORY 
-        = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR];
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_MAGIC 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.Magic;
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_CODE 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfCode;
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_INITIALIZED_DATA 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfInitializedData;
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_UNINITIALIZED_DATA 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfUninitializedData;
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_ADDRESS_OF_ENTRYPOINT 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint;
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_BASE_OF_CODE 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.BaseOfCode;
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_IMAGEBASE 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.ImageBase;
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SECTION_ALIGNMENT 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.SectionAlignment;
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_FILE_ALIGNMENT 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.FileAlignment;
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_IMAGE 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfImage;
+        peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_HEADERS 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
+
+        peFile->PEFILE_EXPORT_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_EXPORT];
+        peFile->PEFILE_IMPORT_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_IMPORT];
+        peFile->PEFILE_RESOURCE_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_RESOURCE];
+        peFile->PEFILE_EXCEPTION_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_EXCEPTION];
+        peFile->PEFILE_SECURITY_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_SECURITY];
+        peFile->PEFILE_BASERELOC_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_BASERELOC];
+        peFile->PEFILE_DEBUG_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_DEBUG];
+        peFile->PEFILE_ARCHITECTURE_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_ARCHITECTURE];
+        peFile->PEFILE_GLOBALPTR_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_GLOBALPTR];
+        peFile->PEFILE_TLS_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_TLS];
+        peFile->PEFILE_LOAD_CONFIG_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG];
+        peFile->PEFILE_BOUND_IMPORT_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT];
+        peFile->PEFILE_IAT_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_IAT];
+        peFile->PEFILE_DELAY_IMPORT_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT];
+        peFile->PEFILE_COM_DESCRIPTOR_DIRECTORY 
+            = peFile->PEFILE_NT_HEADERS.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR];
+    }
 }
 
 void PrintNTHeadersInfo64(PE64FILE* peFile) {
@@ -405,7 +538,14 @@ void PrintNTHeadersInfo64(PE64FILE* peFile) {
 }
 
 void ParseSectionHeaders64(PE64FILE * peFile) {
-	
+    if (peFile  == NULL) {
+        printf("ParseSectionHeaders64 -> peFile == NULL\n");
+        return;
+    }
+	if (peFile->Ppefile == NULL) {
+        printf("ParseSectionHeaders64 -> peFile->Ppefile == NULL\n");
+        return;
+    }
 	peFile->PEFILE_SECTION_HEADERS = malloc(
         sizeof(___IMAGE_SECTION_HEADER) * 
         peFile->PEFILE_NT_HEADERS_FILE_HEADER_NUMBER_OF_SECTIONS
@@ -422,7 +562,14 @@ void ParseSectionHeaders64(PE64FILE * peFile) {
 }
 
 void PrintSectionHeadersInfo64(PE64FILE * peFile) {
-	
+	if (peFile == NULL) {
+        printf("PrintSectionHeadersInfo64 -> peFile == NULL\n");
+        return;
+    }
+    if (peFile->PEFILE_SECTION_HEADERS == NULL) {
+        printf("PrintSectionHeadersInfo64 -> peFile->PEFILE_SECTION_HEADERS == NULL\n");
+        return;
+    }
 	printf(" SECTION HEADERS:\n");
 	printf(" ----------------\n\n");
 
@@ -436,47 +583,73 @@ void PrintSectionHeadersInfo64(PE64FILE * peFile) {
 	}
 
 }
+#define MAX_IMPORT_DESCRIPTORS 1024
 
 void ParseImportDirectory64(PE64FILE * peFile) {
-	
-	_DWORD _import_directory_address = resolve64(
+    if (peFile == NULL) {
+        printf("ParseImportDirectory64 -> peFile == NULL\n");
+        return;
+    }
+    if (peFile->Ppefile  == NULL) {
+        printf("ParseImportDirectory64 -> peFile->Ppefile == NULL\n");
+        return;
+    }
+    _DWORD _import_directory_address = resolve64(
         peFile, peFile->PEFILE_IMPORT_DIRECTORY.VirtualAddress, 
         locate64(peFile, peFile->PEFILE_IMPORT_DIRECTORY.VirtualAddress)
     );
-	peFile->_import_directory_count = 0;
+    peFile->_import_directory_count = 0;
 
-	while (true) {
-		___IMAGE_IMPORT_DESCRIPTOR tmp;
-		int offset = (
-            peFile->_import_directory_count * sizeof(___IMAGE_IMPORT_DESCRIPTOR)
-        ) + _import_directory_address;
-		fseek(peFile->Ppefile, offset, SEEK_SET);
-		fread(&tmp, sizeof(___IMAGE_IMPORT_DESCRIPTOR), 1, peFile->Ppefile);
+    for (int i = 0; i < MAX_IMPORT_DESCRIPTORS; i++) {
+        ___IMAGE_IMPORT_DESCRIPTOR tmp;
+        int offset = (i * sizeof(___IMAGE_IMPORT_DESCRIPTOR)) + _import_directory_address;
+        fseek(peFile->Ppefile, offset, SEEK_SET);
+        size_t nread = fread(&tmp, sizeof(___IMAGE_IMPORT_DESCRIPTOR), 1, peFile->Ppefile);
 
-		if (tmp.Name == 0x00000000 && tmp.FirstThunk == 0x00000000) {
-            // Al encontrar la entrada nula, finalizamos sin decrementar.
-            peFile->_import_directory_size = peFile->_import_directory_count * sizeof(___IMAGE_IMPORT_DESCRIPTOR);
+        if (nread != 1) {
+            // No se pudo leer más, probablemente fin de archivo
             break;
         }
 
-		peFile->_import_directory_count++;
-	}
+        if (tmp.Name == 0x00000000 && tmp.FirstThunk == 0x00000000) {
+            // Entrada nula encontrada, fin del directorio de importación
+            peFile->_import_directory_size = i * sizeof(___IMAGE_IMPORT_DESCRIPTOR);
+            break;
+        }
 
-	peFile->PEFILE_IMPORT_TABLE = malloc(sizeof(___IMAGE_IMPORT_DESCRIPTOR) * peFile->_import_directory_count);
+        peFile->_import_directory_count++;
+    }
 
-	for (int i = 0; i < peFile->_import_directory_count; i++) {
-		int offset = (i * sizeof(___IMAGE_IMPORT_DESCRIPTOR)) + _import_directory_address;
-		fseek(peFile->Ppefile, offset, SEEK_SET);
-		fread(&(peFile->PEFILE_IMPORT_TABLE[i]), sizeof(___IMAGE_IMPORT_DESCRIPTOR), 1, peFile->Ppefile);
-	}   
+    if (peFile->_import_directory_count > 0) {
+        peFile->PEFILE_IMPORT_TABLE = malloc(sizeof(___IMAGE_IMPORT_DESCRIPTOR) * peFile->_import_directory_count);
 
+        for (int i = 0; i < peFile->_import_directory_count; i++) {
+            int offset = (i * sizeof(___IMAGE_IMPORT_DESCRIPTOR)) + _import_directory_address;
+            fseek(peFile->Ppefile, offset, SEEK_SET);
+            fread(&(peFile->PEFILE_IMPORT_TABLE[i]), sizeof(___IMAGE_IMPORT_DESCRIPTOR), 1, peFile->Ppefile);
+        }
+    } else {
+        peFile->PEFILE_IMPORT_TABLE = NULL;
+    }
 }
 
 void PrintImportTableInfo64(PE64FILE * peFile) {
-	
+	if (peFile == NULL) {
+        printf("PrintImportTableInfo64 -> peFile == NULL\n");
+        return;
+    }
+    if (peFile->PEFILE_IMPORT_TABLE == NULL) {
+        printf("PrintImportTableInfo64 -> peFile->PEFILE_IMPORT_TABLE == NULL\n");
+        return;
+    }
+    if (peFile->Ppefile  == NULL) {
+        printf("PrintImportTableInfo64 -> peFile->Ppefile == NULL\n");
+        return;
+    }
+
     printf(" IMPORT TABLE:\n");
     printf(" ----------------\n\n");
-
+    
     for (int i = 0; i < peFile->_import_directory_count; i++) {
         _DWORD NameAddr = resolve64(peFile, 
             peFile->PEFILE_IMPORT_TABLE[i].Name, 
@@ -566,7 +739,14 @@ void PrintImportTableInfo64(PE64FILE * peFile) {
 
 }
 
+#define MAX_BASE_RELOC_BLOCKS 4096
+
 void ParseBaseReloc64(PE64FILE * peFile) {
+    if (peFile == NULL) {
+        printf("ParseBaseReloc64 -> peFile == NULL\n");
+        return;
+    }
+
     // Verificar si existe la sección de relocaciones:
     if (peFile->PEFILE_BASERELOC_DIRECTORY.VirtualAddress == 0 ||
         peFile->PEFILE_BASERELOC_DIRECTORY.Size == 0) {
@@ -575,55 +755,93 @@ void ParseBaseReloc64(PE64FILE * peFile) {
         peFile->PEFILE_BASERELOC_TABLE = NULL;
         return;
     }
-    
-    _DWORD _basereloc_directory_address = resolve64(peFile, 
-        peFile->PEFILE_BASERELOC_DIRECTORY.VirtualAddress, 
+    if (peFile->Ppefile  == NULL) {
+        printf("ParseBaseReloc64 -> peFile->Ppefile == NULL\n");
+        return;
+    }
+
+    _DWORD _basereloc_directory_address = resolve64(
+        peFile,
+        peFile->PEFILE_BASERELOC_DIRECTORY.VirtualAddress,
         locate64(peFile, peFile->PEFILE_BASERELOC_DIRECTORY.VirtualAddress)
     );
-    
+
     peFile->_basreloc_directory_count = 0;
     int _basereloc_size_counter = 0;
-    
-    // Recorrer la tabla de reubicaciones hasta encontrar un bloque nulo
-    while (true) {
+    int max_size = peFile->PEFILE_BASERELOC_DIRECTORY.Size;
+
+    // Primer recorrido: contar bloques
+    for (int i = 0; i < MAX_BASE_RELOC_BLOCKS && _basereloc_size_counter + sizeof(___IMAGE_BASE_RELOCATION) <= max_size; i++) {
         ___IMAGE_BASE_RELOCATION tmp;
         int offset = _basereloc_directory_address + _basereloc_size_counter;
         fseek(peFile->Ppefile, offset, SEEK_SET);
         if (fread(&tmp, sizeof(___IMAGE_BASE_RELOCATION), 1, peFile->Ppefile) != 1) {
             break;  // Error o fin de archivo
         }
-        
-        if (tmp.VirtualAddress == 0x00000000 &&
-            tmp.SizeOfBlock == 0x00000000) {
+
+        if (tmp.VirtualAddress == 0x00000000 && tmp.SizeOfBlock == 0x00000000) {
             break;
         }
-        
+
         peFile->_basreloc_directory_count++;
+        if (tmp.SizeOfBlock == 0) break; // Prevención de bucle infinito
         _basereloc_size_counter += tmp.SizeOfBlock;
+
+        // Prevención de desbordamiento
+        if (_basereloc_size_counter > max_size) break;
     }
-    
+
+    if (peFile->_basreloc_directory_count == 0) {
+        peFile->PEFILE_BASERELOC_TABLE = NULL;
+        return;
+    }
+
     // Reservar memoria para la tabla de reubicaciones
     peFile->PEFILE_BASERELOC_TABLE = malloc(
         sizeof(___IMAGE_BASE_RELOCATION) * peFile->_basreloc_directory_count
     );
     if (peFile->PEFILE_BASERELOC_TABLE == NULL) {
         printf("Error al asignar memoria para la tabla de reloc.\n");
+        peFile->_basreloc_directory_count = 0;
         return;
     }
-    
+
+    // Segundo recorrido: leer bloques
     _basereloc_size_counter = 0;
     for (int i = 0; i < peFile->_basreloc_directory_count; i++) {
         int offset = _basereloc_directory_address + _basereloc_size_counter;
         fseek(peFile->Ppefile, offset, SEEK_SET);
-        fread(&(peFile->PEFILE_BASERELOC_TABLE[i]), sizeof(___IMAGE_BASE_RELOCATION), 1, peFile->Ppefile);
+        if (fread(&(peFile->PEFILE_BASERELOC_TABLE[i]), sizeof(___IMAGE_BASE_RELOCATION), 1, peFile->Ppefile) != 1) {
+            // Si hay error de lectura, poner el contador correcto y terminar
+            peFile->_basreloc_directory_count = i;
+            break;
+        }
+        if (peFile->PEFILE_BASERELOC_TABLE[i].SizeOfBlock == 0) break; // Prevención de bucle infinito
         _basereloc_size_counter += peFile->PEFILE_BASERELOC_TABLE[i].SizeOfBlock;
+        if (_basereloc_size_counter > max_size) break;
     }
 }
 
 
+
 void PrintBaseRelocationsInfo64(PE64FILE *peFile) {
-    if (!peFile || !peFile->PEFILE_BASERELOC_TABLE || peFile->_basreloc_directory_count == 0)
+    if (peFile == NULL) {
+        printf("PrintBaseRelocationsInfo64 -> peFile == NULL\n");
         return;
+    }
+    if (peFile->PEFILE_BASERELOC_TABLE == NULL) {
+        printf("PrintBaseRelocationsInfo64 -> peFile->PEFILE_BASERELOC_TABLE == NULL\n");
+        return;
+    }
+    if (peFile->PEFILE_BASERELOC_TABLE == NULL) {
+        printf("PrintBaseRelocationsInfo64 -> peFile->_basreloc_directory_count == 0\n");
+        return;
+    }
+    if (peFile->Ppefile  == NULL) {
+        printf("PrintBaseRelocationsInfo64 -> peFile->Ppefile == NULL\n");
+        return;
+    }
+
     
     printf(" BASE RELOCATIONS TABLE:\n");
     printf(" -----------------------\n");
@@ -639,6 +857,14 @@ void PrintBaseRelocationsInfo64(PE64FILE *peFile) {
         if (sectionIndex == -1) {
             printf("  [Error] No se encontró sección para RVA 0x%X\n", blockRVA);
             continue;
+        }
+        if (sectionIndex == -3) {
+            printf("  [Error] No hay secciones validas\n");
+            break;
+        }
+        if (sectionIndex == -2) {
+            printf("  [Error] no es un archivo valido\n");
+            break;
         }
         _DWORD blockFileOffset = resolve64(peFile, blockRVA, sectionIndex);
         
@@ -680,6 +906,23 @@ void AddNewSection64(
     PE64FILE* peFile, 
     const char* newSectionName, _DWORD sizeOfRawData, 
     const void* sectionData, int sectionType) {
+    if (peFile == NULL) {
+        printf("AddNewSection64 -> peFile == NULL\n");
+        return;
+    }
+    if (peFile == NULL) {
+        printf("AddNewSection64 -> newSectionName == NULL\n");
+        return;
+    }
+    if (peFile == NULL) {
+        printf("AddNewSection64 -> sectionData == NULL\n");
+        return;
+    }
+    if (sectionType <= 0) {
+        printf("AddNewSection64 -> sectionType <= 0\n");
+        return;
+    }
+
     // 0. Get the File and Section Alignment
     _DWORD sectionAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.SectionAlignment;
     _DWORD fileAlignment = peFile->PEFILE_NT_HEADERS.OptionalHeader.FileAlignment;
@@ -770,6 +1013,23 @@ void AddNewSection64(
 }
 
 void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sectionData, _DWORD sizeOfRawData) {
+    if (peFile == NULL) {
+        printf("WriteModifiedPEFile64 -> peFile == NULL\n");
+        return;
+    }
+    if (sectionData == NULL) {
+        printf("WriteModifiedPEFile64 -> newFileName == NULL\n");
+        return;
+    }
+    if (sectionData == NULL) {
+        printf("WriteModifiedPEFile64 -> sectionData == NULL\n");
+        return;
+    }
+    if (peFile->Ppefile  == NULL) {
+        printf("WriteModifiedPEFile64 -> peFile->Ppefile == NULL\n");
+        return;
+    }
+
     FILE* newFile = fopen(newFileName, "wb");
     if (newFile == NULL) {
         printf("Error creating the new file.\n");
@@ -812,6 +1072,7 @@ void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sect
         }
         fwrite(padding, 1, paddingSize, newFile);
         free(padding);
+        padding = NULL;
     }
 
     // 5. Copy Section Data
@@ -853,6 +1114,7 @@ void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sect
                 }
                 fwrite(padding, 1, paddingSize, newFile);
                 free(padding);
+                padding = NULL;
             }
         }
 
@@ -872,7 +1134,9 @@ void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sect
         }
         fwrite(padding, 1, finalPaddingSize, newFile);
         free(padding);
+        padding = NULL;
     }
 
     fclose(newFile);
 }
+#endif // LIB_PE_PARSE_C

@@ -1,6 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
+int main() {
+    puts("Esto solo es compilable en windows");
+    return 0;
+}
+
+#else
 #include <windows.h>
 
 #include "LibPEparse.h"
@@ -282,3 +289,4 @@ int main() {
     printf("PE file created successfully.\n");
     return 0;
 }
+#endif

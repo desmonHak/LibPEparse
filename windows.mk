@@ -1,4 +1,4 @@
-TARGET 		 = LibPEparse_c
+TARGET 		 = libPEparse_c
 RM 			 = del
 RMFLAGS      = /Q
 EXTENSION 	 = exe

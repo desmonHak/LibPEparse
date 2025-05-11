@@ -1,5 +1,7 @@
 #include "CreatePe.h"
 
+#include <string.h>
+
 int main() {
     PE64FILE_struct pe;
     initializePE64File(&pe);
