@@ -14,7 +14,6 @@ void PE64FILE_Initialize(PE64FILE* peFile) {
 
 PE64FILE* PE64FILE_Create(char* _NAME, FILE* Ppefile) {
     PE64FILE* peFile = calloc(sizeof(PE64FILE), 1);
-	printf("peFile=%p, _NAME=%p, Ppefile=%p\n", peFile, _NAME, Ppefile);
 
     if (peFile != NULL) {
         PE64FILE_Initialize(peFile); // Inicializar la estructura
@@ -86,35 +85,23 @@ void ParseFile64(PE64FILE* peFile) {
         return;
     }
 
-    printf("peFile=%p\n", peFile);
 	// PARSE DOS HEADER
 	ParseDOSHeader64(peFile);
-    printf("a=%p\n", 1);
 
-    printf("peFile=%p\n", peFile);
 	// PARSE RICH HEADER
 	ParseRichHeader64(peFile);
-    printf("a=%p\n", 2);
 
-    printf("peFile=%p\n", peFile);
 	//PARSE NT HEADERS
 	ParseNTHeaders64(peFile);
-    printf("a=%p\n", 3);
 
-    printf("peFile=%p\n", peFile);
 	// PARSE SECTION HEADERS
 	ParseSectionHeaders64(peFile);
-    printf("a=%p\n", 4);
 
-    printf("peFile=%p\n", peFile);
 	// PARSE IMPORT DIRECTORY
 	ParseImportDirectory64(peFile);
-    printf("a=%p\n", 5);
 
-    printf("peFile=%p\n", peFile);
 	// PARSE BASE RELOCATIONS
 	ParseBaseReloc64(peFile);
-    printf("a=%p\n", 6);
 }
 
 int locate64(PE64FILE* peFile, _DWORD VA) {
