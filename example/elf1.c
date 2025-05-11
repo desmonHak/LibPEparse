@@ -21,12 +21,14 @@ void show_elf_info(const ElfFile *elf) {
     if (nsym) {
         printf("\nSimbolos:\n");
         for (size_t i=0; i<nsym; ++i) {
-            printf("  %3zu: %-30s 0x%lx Info: 0x%x\n",
+            uint8_t info = elf_symbol_info(elf, symtab_idx, i);
+            printf("  %3zu: %-30s 0x%lx Info: 0x%02x [%s|%s]\n",
                 i, elf_symbol_name(elf, symtab_idx, i),
                 (unsigned long)elf_symbol_value(elf, symtab_idx, i),
-                elf_symbol_info(elf, symtab_idx, i));
+                info, sym_type_str(info), sym_bind_str(info));
         }
     }
+    // Relocaciones extendidas
     printf("\nRelocaciones:\n");
     for (size_t i=0; i<elf_section_count(elf); ++i) {
         if (elf_section_type(elf, i)==SHT_REL || elf_section_type(elf, i)==SHT_RELA) {
@@ -38,12 +40,21 @@ void show_elf_info(const ElfFile *elf) {
             }
         }
     }
+
+    // Librerías requeridas
     printf("\nLibrerias requeridas:\n");
     size_t nlib = elf_needed_count(elf);
     for (size_t i=0; i<nlib; ++i)
         printf("  %s\n", elf_needed_name(elf, i));
+
     printf("\nStrings de tablas de cadenas:\n");
     elf_iterate_strings(elf, print_f, NULL);
+
+    // Dynamic
+    show_elf_dynamic(elf);
+
+    // Notas
+    show_elf_notes(elf);
 }
 
 int main(int argc, char **argv) {

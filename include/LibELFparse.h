@@ -372,6 +372,22 @@ static inline Elf64_Shdr* elf64_sheader(Elf64_Header *hdr)
     /* Cast heaven! */
     return (Elf64_Shdr*) ((uintptr_t) hdr + hdr->e_shoff);
 }
+// posibles valores para e_shoff
+#define SHT_NULL            0x0  // Marca que la sección no está activa
+#define SHT_PROGBITS        0x1  // Sección que contiene información definida por el programa
+#define SHT_SYMTAB          0x2  // Sección de tabla de símbolos
+#define SHT_STRTAB          0x3  // Sección de tabla de cadenas
+#define SHT_RELA            0x4  // Sección de entradas de reubicación con añadidos
+#define SHT_HASH            0x5  // Sección de la tabla hash de símbolos
+#define SHT_DYNAMIC         0x6  // Sección para la vinculación dinámica
+#define SHT_NOTE            0x7  // Sección para información de marca del archivo
+#define SHT_NOBITS          0x8  // Sección que no ocupa espacio en el archivo
+#define SHT_REL             0x9  // Sección de entradas de reubicación sin añadidos
+#define SHT_DYNSYM          0xb  // Sección con un conjunto mínimo de símbolos para vinculación dinámica
+#define SHT_FINI_ARRAY      0xf  // Sección con una lista de punteros a funciones de terminación
+#define SHT_INIT_ARRAY      0xe  // Sección con una lista de punteros a funciones de inicialización
+#define SHT_PREINIT_ARRAY   0x10 // Sección con una lista de punteros a funciones de preinicialización
+
 
 
 /**
@@ -872,6 +888,26 @@ const char *elf_needed_name(const ElfFile *elf, size_t idx);
 
 // Strings de tablas de cadenas
 void elf_iterate_strings(const ElfFile *elf, void (*cb)(const char *str, void *user), void *user);
+
+// --- Mostrar información extendida de símbolos ---
+static inline const char *sym_type_str(uint8_t info) {
+    switch (info & 0xf) {
+        case 0: return "NOTYPE";
+        case 1: return "OBJECT";
+        case 2: return "FUNC";
+        case 3: return "SECTION";
+        case 4: return "FILE";
+        default: return "OTHER";
+    }
+}
+static inline const char *sym_bind_str(uint8_t info) {
+    switch (info >> 4) {
+        case 0: return "LOCAL";
+        case 1: return "GLOBAL";
+        case 2: return "WEAK";
+        default: return "OTHER";
+    }
+}
 
 #ifdef __cplusplus
 }

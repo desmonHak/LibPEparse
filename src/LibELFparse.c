@@ -4,6 +4,7 @@
 
 #include "LibELFparse.h"
 
+#include <inttypes.h>
 #include <stdatomic.h>
 
 #include "UtilsC.h"
@@ -12,6 +13,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 // Definicion de una tabla global de simbolos
 typedef struct {
@@ -659,7 +661,7 @@ size_t elf_needed_count(const ElfFile *elf) {
     // Busca SHT_DYNAMIC y cuenta DT_NEEDED
     size_t n = elf_section_count(elf), count=0;
     for (size_t i=0; i<n; ++i) {
-        if (elf_section_type(elf, i)==6) { // SHT_DYNAMIC
+        if (elf_section_type(elf, i)==SHT_DYNAMIC) { // SHT_DYNAMIC
             if (elf->elf_class==ELFCLASS_32) {
                 Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
                 Elf32_Dyn *dyn = (Elf32_Dyn *)((uint8_t *)elf->mem + shdr[i].sh_offset);
@@ -679,7 +681,7 @@ const char *elf_needed_name(const ElfFile *elf, size_t idx) {
     // Busca SHT_DYNAMIC y devuelve el nombre idx-ésimo DT_NEEDED
     size_t n = elf_section_count(elf), count=0;
     for (size_t i=0; i<n; ++i) {
-        if (elf_section_type(elf, i)==6) { // SHT_DYNAMIC
+        if (elf_section_type(elf, i)==SHT_DYNAMIC) { // SHT_DYNAMIC
             if (elf->elf_class==ELFCLASS_32) {
                 Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
                 Elf32_Dyn *dyn = (Elf32_Dyn *)((uint8_t *)elf->mem + shdr[i].sh_offset);
@@ -735,5 +737,92 @@ void elf_iterate_strings(const ElfFile *elf, void (*cb)(const char *str, void *u
         }
     }
 }
+
+
+// --- Mostrar información de la cabecera ELF ---
+void show_elf_header(const ElfFile *elf) {
+    if (elf->elf_class == ELFCLASS_32) {
+        Elf32_Header *h = elf->ehdr32;
+        printf("ELF Header:\n");
+        printf("  Ident: ");
+        for (int i = 0; i < 16; ++i) printf("%02x ", h->e_ident[i]);
+        printf("\n  Tipo: %u\n  Máquina: %u\n  Versión: %u\n", h->e_type, h->e_machine, h->e_version);
+        printf("  Entry: 0x%08x\n", h->e_entry);
+        printf("  PHoff: 0x%08x  SHoff: 0x%08x\n", h->e_phoff, h->e_shoff);
+        printf("  Flags: 0x%08x\n", h->e_flags);
+        printf("  EHsize: %u  PHentsize: %u  PHnum: %u\n", h->e_ehsize, h->e_phentsize, h->e_phnum);
+        printf("  SHentsize: %u  SHnum: %u  SHstrndx: %u\n", h->e_shentsize, h->e_shnum, h->e_shstrndx);
+    } else {
+        Elf64_Header *h = elf->ehdr64;
+        printf("ELF Header:\n");
+        printf("  Ident: ");
+        for (int i = 0; i < 16; ++i) printf("%02x ", h->e_ident[i]);
+        printf("\n  Tipo: %u\n  Máquina: %u\n  Versión: %u\n", h->e_type, h->e_machine, h->e_version);
+        printf("  Entry: 0x%016" PRIx64 "\n", (uint64_t)h->e_entry);
+        printf("  PHoff: 0x%016" PRIx64 "  SHoff: 0x%016" PRIx64 "\n", (uint64_t)h->e_phoff, (uint64_t)h->e_shoff);
+        printf("  Flags: 0x%08x\n", h->e_flags);
+        printf("  EHsize: %u  PHentsize: %u  PHnum: %u\n", h->e_ehsize, h->e_phentsize, h->e_phnum);
+        printf("  SHentsize: %u  SHnum: %u  SHstrndx: %u\n", h->e_shentsize, h->e_shnum, h->e_shstrndx);
+    }
+}
+
+// --- Mostrar cabecera de programa ---
+void show_elf_program_headers(const ElfFile *elf) {
+    printf("\nProgram Headers:\n");
+    if (elf->elf_class == ELFCLASS_32) {
+        Elf32_Header *h = elf->ehdr32;
+        Elf32_Phdr *phdr = (Elf32_Phdr *)((uint8_t *)elf->mem + h->e_phoff);
+        for (int i = 0; i < h->e_phnum; ++i) {
+            printf("  %2d: Type: 0x%x Offset: 0x%08x Vaddr: 0x%08x Paddr: 0x%08x Filesz: 0x%08x Memsz: 0x%08x Flags: 0x%x Align: 0x%x\n",
+                i, phdr[i].p_type, phdr[i].p_offset, phdr[i].p_vaddr, phdr[i].p_paddr,
+                phdr[i].p_filesz, phdr[i].p_memsz, phdr[i].p_flags, phdr[i].p_align);
+        }
+    } else {
+        Elf64_Header *h = elf->ehdr64;
+        Elf64_Phdr *phdr = (Elf64_Phdr *)((uint8_t *)elf->mem + h->e_phoff);
+        for (int i = 0; i < h->e_phnum; ++i) {
+            printf("  %2d: Type: 0x%x Offset: 0x%016" PRIx64 " Vaddr: 0x%016" PRIx64 " Paddr: 0x%016" PRIx64 " Filesz: 0x%016" PRIx64 " Memsz: 0x%016" PRIx64 " Flags: 0x%x Align: 0x%" PRIx64 "\n",
+                i, phdr[i].p_type, phdr[i].p_offset, phdr[i].p_vaddr, phdr[i].p_paddr,
+                phdr[i].p_filesz, phdr[i].p_memsz, phdr[i].p_flags, phdr[i].p_align);
+        }
+    }
+}
+
+// --- Mostrar tabla dinámica (DT_*) ---
+void show_elf_dynamic(const ElfFile *elf) {
+    printf("\nDynamic Section:\n");
+    size_t n = elf_section_count(elf);
+    for (size_t i=0; i<n; ++i) {
+        if (elf_section_type(elf, i) == SHT_DYNAMIC) {
+            if (elf->elf_class == ELFCLASS_32) {
+                Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+                Elf32_Dyn *dyn = (Elf32_Dyn *)((uint8_t *)elf->mem + shdr[i].sh_offset);
+                size_t nent = shdr[i].sh_size / sizeof(Elf32_Dyn);
+                for (size_t j=0; j<nent; ++j)
+                    printf("  Tag: 0x%08x  Val: 0x%08x\n", dyn[j].d_tag, dyn[j].d_un.d_val);
+            } else {
+                Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+                Elf64_Dyn *dyn = (Elf64_Dyn *)((uint8_t *)elf->mem + shdr[i].sh_offset);
+                size_t nent = shdr[i].sh_size / sizeof(Elf64_Dyn);
+                for (size_t j=0; j<nent; ++j)
+                    printf("  Tag: 0x%016" PRIx64 "  Val: 0x%016" PRIx64 "\n", (uint64_t)dyn[j].d_tag, (uint64_t)dyn[j].d_un.d_val);
+            }
+        }
+    }
+}
+
+// --- Mostrar notas (si existen) ---
+void show_elf_notes(const ElfFile *elf) {
+    printf("\nNotes:\n");
+    size_t n = elf_section_count(elf);
+    for (size_t i=0; i<n; ++i) {
+        if (elf_section_type(elf, i) == SHT_NOTE) {
+            printf("  Seccion %zu: %s\n", i, elf_section_name(elf, i));
+            // Leer y mostrar notas si quieres, aquí solo indicamos que existen
+        }
+    }
+}
+
+
 
 #endif
