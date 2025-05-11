@@ -11,9 +11,11 @@ add_executable(code1
         include/LibCOFFparse.h
         include/LibELFparse.h
         include/LibPEparse.h
+        include/UtilsC.h
         src/LibCOFFparse.c
         src/LibPEparse.c
         src/LibELFparse.c
+        src/UtilsC.c
         example/code1.c)
 
 # example/code2.c
@@ -22,10 +24,12 @@ add_executable(code2
         include/LibCOFFparse.h
         include/LibELFparse.h
         include/LibPEparse.h
+        include/UtilsC.h
         src/CreatePe.c
         src/LibCOFFparse.c
         src/LibELFparse.c
         src/LibPEparse.c
+        src/UtilsC.c
         example/code2.c)
 
 # example/coff1.c
@@ -34,10 +38,12 @@ add_executable(coff1
         include/LibCOFFparse.h
         include/LibELFparse.h
         include/LibPEparse.h
+        include/UtilsC.h
         src/CreatePe.c
         src/LibCOFFparse.c
         src/LibELFparse.c
         src/LibPEparse.c
+        src/UtilsC.c
         example/coff1.c)
 
 # example/coff2.c
@@ -46,10 +52,12 @@ add_executable(coff2
         include/LibCOFFparse.h
         include/LibELFparse.h
         include/LibPEparse.h
+        include/UtilsC.h
         src/CreatePe.c
         src/LibCOFFparse.c
         src/LibELFparse.c
         src/LibPEparse.c
+        src/UtilsC.c
         example/coff2.c)
 
 # example/coff3.c
@@ -58,10 +66,12 @@ add_executable(coff3
         include/LibCOFFparse.h
         include/LibELFparse.h
         include/LibPEparse.h
+        include/UtilsC.h
         src/CreatePe.c
         src/LibCOFFparse.c
         src/LibELFparse.c
         src/LibPEparse.c
+        src/UtilsC.c
         example/coff3.c)
 
 if (MSVC)
@@ -77,8 +87,10 @@ add_executable(main
         include/LibCOFFparse.h
         include/LibELFparse.h
         include/LibPEparse.h
+        include/UtilsC.h
         src/CreatePe.c
         src/LibCOFFparse.c
         src/LibELFparse.c
         src/LibPEparse.c
+        src/UtilsC.c
         example/main.c)
