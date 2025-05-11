@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-// Inicializa la estructura PE con headers mínimos
+// Inicializa la estructura PE con headers minimos
 void initializePE64File(PE64FILE_struct* pe) {
     memset(pe, 0, sizeof(PE64FILE_struct));
     // DOS Header
@@ -40,7 +40,7 @@ void initializePE64File(PE64FILE_struct* pe) {
     pe->ntHeaders.OptionalHeader.SizeOfHeaders = 0x400; // Valor inicial mayor
 }
 
-// Agrega una nueva sección al PE y retorna su índice
+// Agrega una nueva seccion al PE y retorna su indice
 int addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, _BYTE* data, _DWORD dataSize) {
     pe->numberOfSections++;
     pe->sectionHeaders = realloc(pe->sectionHeaders, pe->numberOfSections * sizeof(___IMAGE_SECTION_HEADER));
@@ -82,7 +82,7 @@ int addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, _B
     return pe->numberOfSections - 1;
 }
 
-// Retorna el índice de una sección buscada por su nombre (o -1 si no se encuentra)
+// Retorna el indice de una seccion buscada por su nombre (o -1 si no se encuentra)
 int getSectionIndex(PE64FILE_struct* pe, const char* name) {
     for (int i = 0; i < pe->numberOfSections; i++) {
         if (strncmp((char*)pe->sectionHeaders[i].Name, name, ___IMAGE_SIZEOF_SHORT_NAME) == 0)
@@ -91,7 +91,7 @@ int getSectionIndex(PE64FILE_struct* pe, const char* name) {
     return -1;
 }
 
-// Anexa nuevos datos a una sección existente (por ejemplo, para agregar código a .text)
+// Anexa nuevos datos a una seccion existente (por ejemplo, para agregar codigo a .text)
 void appendToSection(PE64FILE_struct* pe, const char* name, _BYTE* data, _DWORD dataSize) {
     int index = getSectionIndex(pe, name);
     if (index < 0) return;
@@ -105,7 +105,7 @@ void appendToSection(PE64FILE_struct* pe, const char* name, _BYTE* data, _DWORD 
     pe->sectionHeaders[index].SizeOfRawData = align(newSize, FILE_ALIGN);
 }
 
-// Agrega una sección .bss (datos no inicializados) generando un buffer de ceros
+// Agrega una seccion .bss (datos no inicializados) generando un buffer de ceros
 void addBssSection(PE64FILE_struct* pe, const char* name, _DWORD size) {
     _BYTE* zeroBuffer = calloc(1, size);
     addSection(
@@ -114,23 +114,23 @@ void addBssSection(PE64FILE_struct* pe, const char* name, _DWORD size) {
     free(zeroBuffer);
 }
 
-// Construye una sección .idata con múltiples entradas de importación
+// Construye una seccion .idata con múltiples entradas de importacion
 // Parámetros:
 //   libs: array de ImportLibrary
-//   numLibs: cantidad de librerías
-//   idataRVA: RVA base en la sección .idata donde se ubicará el contenido
+//   numLibs: cantidad de librerias
+//   idataRVA: RVA base en la seccion .idata donde se ubicará el contenido
 //   outSize: tamaño total del buffer generado (salida)
 _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA, _DWORD* outSize) {
-    // 1. Tamaño de la Import Directory Table (una descriptor por librería + uno nulo)
+    // 1. Tamaño de la Import Directory Table (una descriptor por libreria + uno nulo)
     _DWORD sizeImportDir = (numLibs + 1) * sizeof(___IMAGE_IMPORT_DESCRIPTOR);
     
-    // 2. Para cada librería se reservará ILT e IAT:
+    // 2. Para cada libreria se reservará ILT e IAT:
     _DWORD sizeILT_IAT = 0;
     for (int i = 0; i < numLibs; i++) {
         sizeILT_IAT += (libs[i].numFunctions + 1) * sizeof(_QWORD) * 2; // ILT + IAT
     }
     
-    // 3. Para cada función, se necesita espacio para Hint/Name (WORD + cadena + terminador)
+    // 3. Para cada funcion, se necesita espacio para Hint/Name (WORD + cadena + terminador)
     _DWORD sizeHintName = 0;
     for (int i = 0; i < numLibs; i++) {
         for (int j = 0; j < libs[i].numFunctions; j++) {
@@ -138,7 +138,7 @@ _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA,
         }
     }
     
-    // 4. Para cada librería, reservar espacio para el nombre de la DLL (cadena + terminador)
+    // 4. Para cada libreria, reservar espacio para el nombre de la DLL (cadena + terminador)
     _DWORD sizeDllNames = 0;
     for (int i = 0; i < numLibs; i++) {
         sizeDllNames += (_DWORD)strlen(libs[i].dllName) + 1;
@@ -153,7 +153,7 @@ _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA,
     
     // Reservamos áreas consecutivas:
     //  [0, sizeImportDir): Import Directory Table
-    //  [sizeImportDir, sizeImportDir + sizeILT_IAT): ILT + IAT para todas las librerías
+    //  [sizeImportDir, sizeImportDir + sizeILT_IAT): ILT + IAT para todas las librerias
     //  [sizeImportDir + sizeILT_IAT, sizeImportDir + sizeILT_IAT + sizeHintName): Hint/Name tables
     //  [sizeImportDir + sizeILT_IAT + sizeHintName, totalSize): DLL names
     _DWORD importDirOffset = 0;
@@ -163,31 +163,31 @@ _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA,
     
     // Construir Import Directory Table
     ___IMAGE_IMPORT_DESCRIPTOR* importDir = (___IMAGE_IMPORT_DESCRIPTOR*)(buffer + importDirOffset);
-    // Variable para ir avanzando en la región ILT/IAT
+    // Variable para ir avanzando en la region ILT/IAT
     _DWORD currentILT_IAT = iltIatOffset;
     for (int i = 0; i < numLibs; i++) {
         int numFuncs = libs[i].numFunctions;
         _DWORD thisILT = currentILT_IAT;
         _DWORD thisIAT = currentILT_IAT + (numFuncs + 1) * sizeof(_QWORD);
         
-        // Configurar descriptor para la librería i
+        // Configurar descriptor para la libreria i
         importDir[i].DUMMYUNIONNAME__.OriginalFirstThunk = idataRVA + thisILT;
         importDir[i].TimeDateStamp = 0;
         importDir[i].ForwarderChain = 0;
-        importDir[i].Name = idataRVA + dllNameOffset; // Ubicación del nombre de la DLL
+        importDir[i].Name = idataRVA + dllNameOffset; // Ubicacion del nombre de la DLL
         importDir[i].FirstThunk = idataRVA + thisIAT;
         
-        // Llenar ILT e IAT para esta librería
+        // Llenar ILT e IAT para esta libreria
         _QWORD* iltArray = (_QWORD*)(buffer + thisILT);
         _QWORD* iatArray = (_QWORD*)(buffer + thisIAT);
         for (int j = 0; j < numFuncs; j++) {
-            // En cada entrada ILT/IAT se almacena el RVA a la entrada Hint/Name para la función
+            // En cada entrada ILT/IAT se almacena el RVA a la entrada Hint/Name para la funcion
             // Nota: Si se desea que apunte directamente al nombre 
-            // (omitiendo el WORD hint), se podría sumar sizeof(WORD)
+            // (omitiendo el WORD hint), se podria sumar sizeof(WORD)
             iltArray[j] = idataRVA + hintNameOffset;
             iatArray[j] = idataRVA + hintNameOffset;
             
-            // Escribir Hint/Name: WORD (hint, 0) + nombre de la función
+            // Escribir Hint/Name: WORD (hint, 0) + nombre de la funcion
             _WORD hint = 0;
             memcpy(buffer + hintNameOffset, &hint, sizeof(_WORD));
             hintNameOffset += sizeof(_WORD);
@@ -198,7 +198,7 @@ _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA,
         iltArray[numFuncs] = 0;
         iatArray[numFuncs] = 0;
         
-        // Actualizar currentILT_IAT para la siguiente librería:
+        // Actualizar currentILT_IAT para la siguiente libreria:
         currentILT_IAT += (numFuncs + 1) * sizeof(_QWORD) * 2;
         
         // Escribir el nombre de la DLL
@@ -213,9 +213,9 @@ _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA,
     return buffer;
 }
 
-// Genera un buffer que contiene una tabla de importaciones para un entry (función y DLL)
+// Genera un buffer que contiene una tabla de importaciones para un entry (funcion y DLL)
 // Se calcula internamente el layout de: Import Directory, ILT, IAT, Hint/Name y nombre de DLL.
-// Construye la sección .idata para importar una función desde una DLL
+// Construye la seccion .idata para importar una funcion desde una DLL
 _BYTE* buildIdataSection(const char* funcName, const char* dllName, _DWORD idataRVA, _DWORD* outSize) {
     _DWORD impDescSize = sizeof(___IMAGE_IMPORT_DESCRIPTOR);
     _DWORD importLookupTableRVA = impDescSize * 2;
@@ -266,22 +266,22 @@ _BYTE* buildIdataSection(const char* funcName, const char* dllName, _DWORD idata
 
 
 
-// Función para calcular el desplazamiento (disp32) para una instrucción call con direccionamiento RIP-relative
+// Funcion para calcular el desplazamiento (disp32) para una instruccion call con direccionamiento RIP-relative
 int32_t calcularDesplazamientoCall(uint64_t direccionInstruccion, uint64_t direccionDestino) {
     return (int32_t)(direccionDestino - direccionInstruccion);
 }
-// Función para corregir todas las instrucciones 'call' en una sección de código
+// Funcion para corregir todas las instrucciones 'call' en una seccion de codigo
 void corregirDesplazamientosCall(
     uint8_t* codigo, size_t tamanoCodigo, 
     uint64_t baseVirtualSeccion, uint64_t direccionIAT, FunctionOffset* funcOffsets, int numFunciones) {
     int callIndex = 0;
     for (size_t i = 0; i < tamanoCodigo - 5; i++) {
-        // Buscar la instrucción 'call' (opcode 0xFF 0x15)
+        // Buscar la instruccion 'call' (opcode 0xFF 0x15)
         if (codigo[i] == 0xFF && codigo[i+1] == 0x15) {
             if (callIndex < numFunciones) {
-                // Dirección virtual de la instrucción siguiente al 'call'
+                // Direccion virtual de la instruccion siguiente al 'call'
                 uint64_t direccionInstruccionSiguiente = baseVirtualSeccion + i + 6;
-                // Calcular el desplazamiento, incluyendo el offset de la función en la IAT
+                // Calcular el desplazamiento, incluyendo el offset de la funcion en la IAT
                 int32_t desplazamiento = calcularDesplazamientoCall(
                     direccionInstruccionSiguiente, direccionIAT + funcOffsets[callIndex].offset);
                 // Escribir el desplazamiento en el lugar correspondiente

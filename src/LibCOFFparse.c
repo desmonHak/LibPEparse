@@ -179,7 +179,7 @@ COFF_SYMBOL create_symbol(const char* name, uint32_t value, int16_t section_numb
 
 void setup_sections(SECTION_HEADER* sections, NewSection* newSections, int num_sections) {
     uint32_t current_offset = align(sizeof(COFF_HEADER) + num_sections * sizeof(SECTION_HEADER), 16);
-    uint32_t current_virtual_address = 0x1000;  // Dirección virtual base
+    uint32_t current_virtual_address = 0x1000;  // Direccion virtual base
 
     for (int i = 0; i < num_sections; i++) {
         strncpy(sections[i].Name, newSections[i].name, 8);
@@ -187,14 +187,14 @@ void setup_sections(SECTION_HEADER* sections, NewSection* newSections, int num_s
         sections[i].VirtualSize = newSections[i].data.size;
         sections[i].VirtualAddress = current_virtual_address;
         sections[i].SizeOfRawData = align(newSections[i].data.size, 16);
-        sections[i].PointerToRawData = align(current_offset, 16);  // Asegura alineación de 16 bytes
+        sections[i].PointerToRawData = align(current_offset, 16);  // Asegura alineacion de 16 bytes
         sections[i].PointerToRelocations = current_offset + sections[i].SizeOfRawData;
         sections[i].PointerToLinenumbers = 0;
         sections[i].NumberOfRelocations = newSections[i].numRelocations;
         sections[i].NumberOfLinenumbers = 0;
         sections[i].Characteristics = newSections[i].characteristics;
         current_offset = align(sections[i].PointerToRelocations + newSections[i].numRelocations * sizeof(RELOCATION), 16);
-        current_virtual_address += align(newSections[i].data.size, 16); // Incrementa la dirección virtual
+        current_virtual_address += align(newSections[i].data.size, 16); // Incrementa la direccion virtual
     }
 }
 

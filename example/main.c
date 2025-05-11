@@ -18,8 +18,8 @@ int main(int argc, char **argv) {
     PE64FILE *file = PE64FILE_Create("programa.exe", pe_file_path);
 
 
-    // Añadir una nueva sección
-    char newSectionData[] = "Esto es una nueva sección";
+    // Añadir una nueva seccion
+    char newSectionData[] = "Esto es una nueva seccion";
     _DWORD newSectionSize = sizeof(newSectionData);
     AddNewSection64(file, ".newsec1", newSectionSize, newSectionData, SECTION_TYPE_CODE);
 

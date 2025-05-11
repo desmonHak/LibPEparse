@@ -6,7 +6,7 @@ int main() {
     PE64FILE_struct pe;
     initializePE64File(&pe);
 
-    // 1. Agregar sección .text con código inicial
+    // 1. Agregar seccion .text con codigo inicial
     _BYTE textCode[] = {
         0x48, 0x83, 0xEC, 0x28,                     // sub rsp, 40h
         0x48, 0x33, 0xC9,                           // xor rcx, rcx
@@ -23,8 +23,8 @@ int main() {
     int textIndex = addSection(&pe, ".text", ___IMAGE_SCN_CNT_CODE | ___IMAGE_SCN_MEM_EXECUTE | ___IMAGE_SCN_MEM_READ,
                                textCode, sizeof(textCode));
 
-    // 2. Construir la sección .idata para importar "ExitProcess" de "KERNEL32.dll"
-    // Declaración de las librerías a importar
+    // 2. Construir la seccion .idata para importar "ExitProcess" de "KERNEL32.dll"
+    // Declaracion de las librerias a importar
     const char* kernel32Funcs[] = { "ExitProcess", "WriteConsoleA" };
     const char* user32Funcs[]   = { "MessageBoxA" };
 
@@ -35,18 +35,18 @@ int main() {
 
     int numLibs = sizeof(libs) / sizeof(libs[0]);
 
-    // Asumiendo que la sección .idata se ubicará en RVA = SECT_ALIGN * 2 (por ejemplo, 0x2000)
+    // Asumiendo que la seccion .idata se ubicará en RVA = SECT_ALIGN * 2 (por ejemplo, 0x2000)
     _DWORD idataRVA = SECT_ALIGN * 2;
     _DWORD idataSize = 0;
     _BYTE* idataBuffer = buildMultiIdataSection(libs, numLibs, idataRVA, &idataSize);
 
-    // Agregar la sección .idata al PE
+    // Agregar la seccion .idata al PE
     int idataIndex = addSection(&pe, ".idata",
         ___IMAGE_SCN_CNT_INITIALIZED_DATA | ___IMAGE_SCN_MEM_READ | ___IMAGE_SCN_MEM_WRITE,
         idataBuffer, idataSize);
     free(idataBuffer);
 
-    // necesario para la sección .idata y la IAT
+    // necesario para la seccion .idata y la IAT
     pe.ntHeaders.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress = idataRVA;
     pe.ntHeaders.OptionalHeader.DataDirectory[
         ___IMAGE_DIRECTORY_ENTRY_IMPORT].Size = sizeof(___IMAGE_IMPORT_DESCRIPTOR) * 2;
@@ -77,16 +77,16 @@ int main() {
         sizeof(stack_functions_offsets) / sizeof(stack_functions_offsets[0])
     );
 
-    // 4. Anexar código extra a la sección .text (por ejemplo, tres NOPs)
+    // 4. Anexar codigo extra a la seccion .text (por ejemplo, tres NOPs)
     _BYTE extraCode[] = { 0x90, 0x90, 0x90 };
     appendToSection(&pe, ".text", extraCode, sizeof(extraCode));
     
 
-    // 4.5 Anexar sección .data 
+    // 4.5 Anexar seccion .data 
     const char message[] = "Hello, World!";
     const char caption[] = "Message";
 
-    _BYTE dataSection[512] = {0};  // Aumentamos el tamaño para asegurar alineación
+    _BYTE dataSection[512] = {0};  // Aumentamos el tamaño para asegurar alineacion
     memcpy(dataSection, message, strlen(message) + 1);
     memcpy(dataSection + strlen(message) + 1, caption, strlen(caption) + 1);
 
@@ -96,7 +96,7 @@ int main() {
 
 
 
-    // 5. Agregar una sección .bss (datos no inicializados)
+    // 5. Agregar una seccion .bss (datos no inicializados)
     addBssSection(&pe, ".bss", 0x100); // 256 bytes
 
     // 6. Establecer AddressOfEntryPoint al inicio de .text y actualizar SizeOfImage
@@ -122,7 +122,7 @@ int main() {
 
     printf("baseVirtualTexto %p baseVirtualData %p\n", (void*)baseVirtualTexto, (void*)baseVirtualData);
     printf("offsetToMessage = %d offsetToCaption = %d\n", offsetToMessage, offsetToCaption);
-    // Corregir los desplazamientos en el código
+    // Corregir los desplazamientos en el codigo
     *(int32_t*)(codigoTexto + 10) = offsetToMessage;
     *(int32_t*)(codigoTexto + 17) = offsetToCaption;
 
@@ -132,7 +132,7 @@ int main() {
     writePE64File(&pe, "nuevo_pe_desde_cero.exe");
     freePE64File(&pe);
 
-    // Opcional: Imprimir información del PE usando funciones de LibPEparse
+    // Opcional: Imprimir informacion del PE usando funciones de LibPEparse
     PE64FILE *file = PE64FILE_Create("nuevo_pe_desde_cero.exe", fopen("nuevo_pe_desde_cero.exe", "rb"));
     PE64FILE_PrintInfo64(file);
 

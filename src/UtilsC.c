@@ -2,6 +2,7 @@
 #define UTILS_C
 
 #include "UtilsC.h"
+#include "LibELFparse.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -21,17 +22,17 @@
 #endif
 
 /**
- * Función multiplataforma para reserva de memoria
+ * Funcion multiplataforma para reserva de memoria
  *
- * - En Windows, VirtualAlloc ignora los conceptos de "anónima" y "privada"
+ * - En Windows, VirtualAlloc ignora los conceptos de "anonima" y "privada"
  *      porque siempre reserva memoria privada para el proceso.
  *
- * - En POSIX, MAP_ANONYMOUS | MAP_PRIVATE es la opción típica para memoria
+ * - En POSIX, MAP_ANONYMOUS | MAP_PRIVATE es la opcion tipica para memoria
  *      dinámica sin respaldo de archivo.
  *
- * - En Windows, esta función asigna memoria de forma reservada y comprometida.
+ * - En Windows, esta funcion asigna memoria de forma reservada y comprometida.
  *
- * Requiere enlazar con kernel32.lib (implícitamente en compiladores como MSVC).
+ * Requiere enlazar con kernel32.lib (implicitamente en compiladores como MSVC).
  *
  *
  * @param size tamaño de la reservar. Debe de ser un multiplo de pagina de la maquina y sistema de destino
@@ -89,21 +90,21 @@ int free_reserved_memory(void* addr, size_t size) {
 #endif
 }
 /**
- * @brief Mapea un segmento de un archivo o memoria anónima en el espacio de direcciones del proceso.
+ * @brief Mapea un segmento de un archivo o memoria anonima en el espacio de direcciones del proceso.
  *
- * Esta función es multiplataforma y usa `mmap` en sistemas POSIX y `MapViewOfFileEx` en Windows.
- * Si se proporciona una dirección deseada (`desired_addr`) y se especifica la bandera `MAP_FIXED`,
- * la función intentará realizar el mapeo exactamente en esa dirección.
+ * Esta funcion es multiplataforma y usa `mmap` en sistemas POSIX y `MapViewOfFileEx` en Windows.
+ * Si se proporciona una direccion deseada (`desired_addr`) y se especifica la bandera `MAP_FIXED`,
+ * la funcion intentará realizar el mapeo exactamente en esa direccion.
  *
- * - En Windows, se emula `MAP_FIXED` rechazando el mapeo si no se puede obtener la dirección exacta.
- * - Si `fd == -1`, se intenta un mapeo anónimo (en POSIX: `MAP_ANONYMOUS`; en Windows: se usa el archivo
- *      de paginación).
+ * - En Windows, se emula `MAP_FIXED` rechazando el mapeo si no se puede obtener la direccion exacta.
+ * - Si `fd == -1`, se intenta un mapeo anonimo (en POSIX: `MAP_ANONYMOUS`; en Windows: se usa el archivo
+ *      de paginacion).
  *
- * @param desired_addr Dirección donde se desea mapear el segmento, o `NULL` para que el sistema la elija.
+ * @param desired_addr Direccion donde se desea mapear el segmento, o `NULL` para que el sistema la elija.
  * @param size Tamaño del mapeo en bytes.
  * @param prot Protecciones de la memoria (ej. `PROT_READ`, `PROT_WRITE`, `PROT_EXEC`).
  * @param flags Banderas de mapeo (ej. `MAP_PRIVATE`, `MAP_ANONYMOUS`, `MAP_FIXED`).
- * @param fd Descriptor de archivo a mapear. Si es -1, se asume un mapeo anónimo.
+ * @param fd Descriptor de archivo a mapear. Si es -1, se asume un mapeo anonimo.
  * @param offset Desplazamiento dentro del archivo desde donde comenzar el mapeo.
  * @return Puntero a la memoria mapeada, o `NULL` si falla.
  */
@@ -157,7 +158,7 @@ void* map_segment(void* desired_addr, size_t size, int prot, int flags, int fd, 
 
     CloseHandle(hMap);
 
-    // Emulación básica de MAP_FIXED: si se especifica desired_addr y la dirección mapeada es distinta, se falla.
+    // Emulacion básica de MAP_FIXED: si se especifica desired_addr y la direccion mapeada es distinta, se falla.
     if ((flags & 0x10 /* MAP_FIXED */) && addr != desired_addr) {
         if (addr) UnmapViewOfFile(addr);
         return NULL;

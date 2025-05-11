@@ -13,6 +13,33 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Definicion de una tabla global de simbolos
+typedef struct {
+    const char *name;
+    void *address;
+} SymbolEntry;
+
+static SymbolEntry global_symbols[] = {
+     {"puts", (void*)puts},
+     {"printf", (void*)printf},
+    // simbolos globales
+    {NULL, NULL}
+};
+
+void *elf_lookup_symbol(const char *name) {
+    printf("elf_lookup_symbol -> %s ", name);
+    for (int i = 0; global_symbols[i].name != NULL; ++i) {
+        if (strcmp(global_symbols[i].name, name) == 0) {
+            printf("%p\n", global_symbols[i].address);
+            return global_symbols[i].address;
+        }
+    }
+    printf("\n");
+
+    return NULL;
+}
+
+
 /**
  * Esta es la primera funcion que debe usarse al cargar un ELF. Comprueba que el ELF
  * tengas los numeros magicos adecuados.
@@ -101,49 +128,63 @@ bool elf64_check_supported(Elf64_Header *hdr) {
     }
     return true;
 }
-
+void *elf32_load_file(void *file) {
+    Elf32_Header *hdr = (Elf32_Header *)file;
+    if(!elf32_check_supported(hdr)) {
+        ERROR_ELF("ELF File cannot be loaded.\n");
+        return;
+    }
+    switch(hdr->e_type) {
+        case ET_EXEC:
+            // TODO : Implement
+            return NULL;
+        case ET_REL:
+            return elf32_load_rel(hdr);
+    }
+    return NULL;
+}
 
 /**
  *
- * Acceso al valor de un símbolo
- * Algunas operaciones, como la vinculación y la reubicación,
- * requieren el valor de un símbolo (o, mejor dicho, su dirección).
- * Aunque las entradas de la tabla de símbolos definen un campo st_value,
- * este solo puede contener una dirección relativa. A continuación, se
- * muestra un ejemplo de cómo calcular la dirección absoluta del
- * valor del símbolo. El código se ha dividido en
- * varias secciones más pequeñas para facilitar su comprensión. (1)
+ * Acceso al valor de un simbolo
+ * Algunas operaciones, como la vinculacion y la reubicacion,
+ * requieren el valor de un simbolo (o, mejor dicho, su direccion).
+ * Aunque las entradas de la tabla de simbolos definen un campo st_value,
+ * este solo puede contener una direccion relativa. A continuacion, se
+ * muestra un ejemplo de como calcular la direccion absoluta del
+ * valor del simbolo. El codigo se ha dividido en
+ * varias secciones más pequeñas para facilitar su comprension. (1)
  *
- * El ejemplo anterior realiza una comprobación tanto con el índice de la tabla
- * de símbolos como con el índice del símbolo; si alguno no está definido,
+ * El ejemplo anterior realiza una comprobacion tanto con el indice de la tabla
+ * de simbolos como con el indice del simbolo; si alguno no está definido,
  * se devuelve 0. En caso contrario, se accede a la entrada del encabezado
- * de sección de la tabla de símbolos en el índice dado. A continuación, se
- * comprueba que el índice de la tabla de símbolos no esté fuera de los
- * límites de la tabla de símbolos. Si la comprobación falla, se muestra
- * un mensaje de error y se devuelve un código de error; de lo contrario,
- * se recupera la entrada de la tabla de símbolos en el índice dado. (2)
+ * de seccion de la tabla de simbolos en el indice dado. A continuacion, se
+ * comprueba que el indice de la tabla de simbolos no esté fuera de los
+ * limites de la tabla de simbolos. Si la comprobacion falla, se muestra
+ * un mensaje de error y se devuelve un codigo de error; de lo contrario,
+ * se recupera la entrada de la tabla de simbolos en el indice dado. (2)
  *
- * Si la sección a la que el símbolo es relativo (dada por st_shndx) es
- * igual a SHN_UNDEF, el símbolo es externo y debe estar vinculado a su
- * definición. Se recupera la tabla de cadenas de la tabla de símbolos
- * actual (la tabla de cadenas de una tabla de símbolos dada está disponible
- * en el encabezado de la sección de la tabla en sh_link), y el nombre del
- * símbolo se encuentra en la tabla de cadenas. A continuación, se utiliza
- * la función elf_lookup_symbol() para buscar la definición de un símbolo
- * por nombre (esta función no se proporciona; una implementación mínima
- * siempre devuelve NULL). Si se encuentra la definición del símbolo, se
- * devuelve. Si el símbolo tiene el indicador STB_WEAK (es un símbolo
+ * Si la seccion a la que el simbolo es relativo (dada por st_shndx) es
+ * igual a SHN_UNDEF, el simbolo es externo y debe estar vinculado a su
+ * definicion. Se recupera la tabla de cadenas de la tabla de simbolos
+ * actual (la tabla de cadenas de una tabla de simbolos dada está disponible
+ * en el encabezado de la seccion de la tabla en sh_link), y el nombre del
+ * simbolo se encuentra en la tabla de cadenas. A continuacion, se utiliza
+ * la funcion elf_lookup_symbol() para buscar la definicion de un simbolo
+ * por nombre (esta funcion no se proporciona; una implementacion minima
+ * siempre devuelve NULL). Si se encuentra la definicion del simbolo, se
+ * devuelve. Si el simbolo tiene el indicador STB_WEAK (es un simbolo
  * débil), se devuelve 0; de lo contrario, se muestra un mensaje
- * de error y se devuelve un código de error. (3)
+ * de error y se devuelve un codigo de error. (3)
  *
- * Si el valor de sh_ndx es igual a SHN_ABS, el valor del símbolo es
+ * Si el valor de sh_ndx es igual a SHN_ABS, el valor del simbolo es
  * absoluto y se devuelve inmediatamente. Si sh_ndx no contiene un
- * valor especial, significa que el símbolo está definido en el
+ * valor especial, significa que el simbolo está definido en el
  * objeto ELF local. Dado que el valor dado por sh_value es
- * relativo a una sección definida sh_ndx, se accede a la
- * entrada del encabezado de sección relevante y se calcula
- * la dirección del símbolo sumando la dirección del archivo
- * en la memoria al valor del símbolo con su desplazamiento de sección.
+ * relativo a una seccion definida sh_ndx, se accede a la
+ * entrada del encabezado de seccion relevante y se calcula
+ * la direccion del simbolo sumando la direccion del archivo
+ * en la memoria al valor del simbolo con su desplazamiento de seccion.
  *
  * @param hdr
  * @param table
@@ -171,7 +212,6 @@ int elf32_get_symval(Elf32_Header *hdr, int table, size_t idx) {
         Elf32_Shdr *strtab = elf32_section(hdr, symtab->sh_link);
         const char *name = (const char *)hdr + strtab->sh_offset + symbol->st_name;
 
-        extern void *elf_lookup_symbol(const char *name);
         void *target = elf_lookup_symbol(name);
 
         if(target == NULL) {
@@ -202,39 +242,39 @@ int elf32_get_symval(Elf32_Header *hdr, int table, size_t idx) {
 
 /**
  * El BSS y SHT_NOBITS
- * El BSS (la sección denominada ".bss") es, en su forma más simple,
+ * El BSS (la seccion denominada ".bss") es, en su forma más simple,
  * un bloque de memoria que se ha puesto a cero.
  * El BSS es el área de memoria donde se almacenan las variables con un tiempo de
  * vida global que no se han inicializado (o que se han inicializado a 0 o NULL).
  *
- * El encabezado de sección del BSS define su tipo sh_type como SHT_NOBITS,
+ * El encabezado de seccion del BSS define su tipo sh_type como SHT_NOBITS,
  * lo que significa que no está presente en la imagen de archivo y debe
- * asignarse durante la ejecución. Una forma sencilla e intuitiva de
+ * asignarse durante la ejecucion. Una forma sencilla e intuitiva de
  * asignar un BSS es asignar memoria y ponerla a cero con un conjunto
  * de memoria (memset). No poner a cero el BSS puede causar un
  * comportamiento inesperado en cualquier programa cargado.
  *
  * Además, es importante tener en cuenta que el BSS debe asignarse
- * antes de realizar cualquier operación que dependa del direccionamiento
- * relativo (como la reubicación), ya que de lo contrario el código
+ * antes de realizar cualquier operacion que dependa del direccionamiento
+ * relativo (como la reubicacion), ya que de lo contrario el codigo
  * puede referenciar memoria basura o generar un fallo.
  *
- * Si bien el BSS es un ejemplo específico, cualquier sección de tipo
+ * Si bien el BSS es un ejemplo especifico, cualquier seccion de tipo
  * SHT_NOBITS con el atributo SHF_ALLOC debe asignarse al inicio de
  * la carga del programa.
  *
- * Dado que este tutorial es general y no específico, el siguiente ejemplo
+ * Dado que este tutorial es general y no especifico, el siguiente ejemplo
  * seguirá la tendencia y utilizará el ejemplo más simple para la
- * asignación de secciones.
+ * asignacion de secciones.
  *
  * @param hdr
  * @return
  */
 int elf32_load_stage1(Elf32_Header *hdr) {
     /**
-     * El ejemplo anterior asigna la memoria necesaria para la sección,
-     * descrita por el campo sh_size del encabezado de la sección. Aunque
-     * la función del ejemplo solo busca las secciones que deben asignarse,
+     * El ejemplo anterior asigna la memoria necesaria para la seccion,
+     * descrita por el campo sh_size del encabezado de la seccion. Aunque
+     * la funcion del ejemplo solo busca las secciones que deben asignarse,
      * puede modificarse para realizar otras operaciones que deben
      * realizarse al principio del proceso de carga.
      */
@@ -265,25 +305,25 @@ int elf32_load_stage1(Elf32_Header *hdr) {
 }
 
 /**
- * Ejemplo de reubicación
+ * Ejemplo de reubicacion
  * Cargar un archivo ELF reubicable implica procesar todas las entradas
- * de reubicación presentes en el archivo (¡Recuerde asignar primero todas las
+ * de reubicacion presentes en el archivo (¡Recuerde asignar primero todas las
  * secciones SHT_NOBITS!). Este proceso comienza con la búsqueda de todas las
- * tablas de reubicación en el archivo, como se muestra en el código de ejemplo a
- * continuación.
+ * tablas de reubicacion en el archivo, como se muestra en el codigo de ejemplo a
+ * continuacion.
  *
  * @param hdr
  * @return
  */
 int elf32_load_stage2(Elf32_Header *hdr) {
     /**
-     * Tenga en cuenta que el código solo procesa entradas Elf32_Rel, pero puede
-     * modificarse para procesar también entradas con sumandos explícitos.
-     * El código también se basa en una función llamada elf_do_reloc,
+     * Tenga en cuenta que el codigo solo procesa entradas Elf32_Rel, pero puede
+     * modificarse para procesar también entradas con sumandos explicitos.
+     * El codigo también se basa en una funcion llamada elf_do_reloc,
      * que se mostrará en el siguiente ejemplo.
      *
-     * Esta función de ejemplo se detiene, muestra un mensaje de error y
-     * devuelve un código de error si no puede procesar una reubicación.
+     * Esta funcion de ejemplo se detiene, muestra un mensaje de error y
+     * devuelve un codigo de error si no puede procesar una reubicacion.
      */
     Elf32_Shdr *shdr = elf32_sheader(hdr);
 
@@ -310,42 +350,42 @@ int elf32_load_stage2(Elf32_Header *hdr) {
 }
 
 /**
- * Dado que la siguiente función es bastante compleja, se ha dividido en fragmentos
+ * Dado que la siguiente funcion es bastante compleja, se ha dividido en fragmentos
  * más pequeños y fáciles de manejar, y se ha explicado en detalle.
  *
- * Tenga en cuenta que el código a continuación asume que el archivo que se
+ * Tenga en cuenta que el codigo a continuacion asume que el archivo que se
  * reubica es un archivo ELF reubicable (los ejecutables ELF y los objetos compartidos
- * también pueden contener entradas de reubicación, pero se procesan de forma
+ * también pueden contener entradas de reubicacion, pero se procesan de forma
  * ligeramente diferente).
  *
  * Tenga en cuenta también que sh_info, para los encabezados de
- * sección de tipo SHT_REL y SHT_RELA, almacena el encabezado de sección
- * al que se aplica la reubicación. (1)
+ * seccion de tipo SHT_REL y SHT_RELA, almacena el encabezado de seccion
+ * al que se aplica la reubicacion. (1)
  *
  * #define DO_386_32(S, A)	    ((S) + (A))
  * #define DO_386_PC32(S, A, P)	((S) + (A) - (P))
  *
- * El código anterior define las macrofunciones que se utilizan para
- * realizar los cálculos de reubicación. También recupera el
- * encabezado de la sección donde se encuentra el símbolo y
+ * El codigo anterior define las macrofunciones que se utilizan para
+ * realizar los cálculos de reubicacion. También recupera el
+ * encabezado de la seccion donde se encuentra el simbolo y
  * calcula una referencia a este. La variable addr indica el inicio
- * de la sección del símbolo, y ref se crea sumando el desplazamiento
- * del símbolo desde la entrada de reubicación. (2)
+ * de la seccion del simbolo, y ref se crea sumando el desplazamiento
+ * del simbolo desde la entrada de reubicacion. (2)
  *
- * A continuación, se accede al valor del símbolo que se está reubicando.
- * Si el índice de la tabla de símbolos almacenado en r_info no está
- * definido, el valor predeterminado es 0. El código también hace
- * referencia a una función llamada elf_get_symval(), implementada
- * previamente. Si el valor devuelto por la función es igual a
- * ELF_RELOC_ERR, se detiene la reubicación y se devuelve dicho
- * código de error. (3)
+ * A continuacion, se accede al valor del simbolo que se está reubicando.
+ * Si el indice de la tabla de simbolos almacenado en r_info no está
+ * definido, el valor predeterminado es 0. El codigo también hace
+ * referencia a una funcion llamada elf_get_symval(), implementada
+ * previamente. Si el valor devuelto por la funcion es igual a
+ * ELF_RELOC_ERR, se detiene la reubicacion y se devuelve dicho
+ * codigo de error. (3)
  *
- * Finalmente, este segmento de código detalla el proceso de reubicación,
- * realizando el cálculo necesario del símbolo reubicado y devolviendo su
- * valor en caso de éxito. Si el tipo de reubicación no es compatible,
- * se muestra un mensaje de error, se detiene la reubicación y la función
- * devuelve un código de error. Si no se han producido errores,
- * la reubicación está completa.
+ * Finalmente, este segmento de codigo detalla el proceso de reubicacion,
+ * realizando el cálculo necesario del simbolo reubicado y devolviendo su
+ * valor en caso de éxito. Si el tipo de reubicacion no es compatible,
+ * se muestra un mensaje de error, se detiene la reubicacion y la funcion
+ * devuelve un codigo de error. Si no se han producido errores,
+ * la reubicacion está completa.
  *
  * @param hdr
  * @param rel
@@ -394,10 +434,10 @@ int elf32_do_reloc(Elf32_Header *hdr, Elf32_Rel *rel, Elf32_Shdr *reltab) {
 
 
 /**
- * El encabezado del programa es una estructura que define información
- * sobre el comportamiento del programa ELF una vez cargado, así como
- * información de enlace en tiempo de ejecución. Los encabezados de programa
- * ELF (al igual que los encabezados de sección) se agrupan para formar la
+ * El encabezado del programa es una estructura que define informacion
+ * sobre el comportamiento del programa ELF una vez cargado, asi como
+ * informacion de enlace en tiempo de ejecucion. Los encabezados de programa
+ * ELF (al igual que los encabezados de seccion) se agrupan para formar la
  * tabla de encabezados de programa.
  *
  * La tabla de encabezados de programa contiene un conjunto continuo de
@@ -408,10 +448,10 @@ int elf32_do_reloc(Elf32_Header *hdr, Elf32_Rel *rel, Elf32_Shdr *reltab) {
  * El encabezado define varios campos útiles como p_type,
  * que distingue entre encabezados; p_offset, que almacena el
  * desplazamiento hasta el segmento al que se refiere el encabezado;
- * y p_vaddr, que define la dirección donde debe existir el código
- * dependiente de la posición.
+ * y p_vaddr, que define la direccion donde debe existir el codigo
+ * dependiente de la posicion.
  *
- * @param mem es la ubicación del encabezado ELF
+ * @param mem es la ubicacion del encabezado ELF
  */
 void *elf32_load_segment_to_memory(void *mem, Elf64_Phdr *phdr, int elf_fd) {
     size_t mem_size = phdr->p_memsz;
@@ -457,6 +497,243 @@ void *elf32_load_segment_to_memory(void *mem, Elf64_Phdr *phdr, int elf_fd) {
         }
     }
     return vaddr;
+}
+
+bool elf_mem_parse(ElfFile *elf, void *mem, size_t size) {
+    if (!mem || size < 16) return false;
+    uint8_t *e_ident = (uint8_t *)mem;
+    if (e_ident[EI_MAG0]!=ELFMAG0 || e_ident[EI_MAG1]!=ELFMAG1 ||
+        e_ident[EI_MAG2]!=ELFMAG2 || e_ident[EI_MAG3]!=ELFMAG3)
+        return false;
+    elf->mem = mem;
+    elf->size = size;
+    if (e_ident[EI_CLASS] == ELFCLASS32) {
+        elf->elf_class = ELFCLASS_32;
+        elf->ehdr32 = (Elf32_Header *)mem;
+    } else if (e_ident[EI_CLASS] == ELFCLASS64) {
+        elf->elf_class = ELFCLASS_64;
+        elf->ehdr64 = (Elf64_Header *)mem;
+    } else {
+        elf->elf_class = ELFCLASS_UNKNOWN;
+        return false;
+    }
+    return true;
+}
+
+size_t elf_section_count(const ElfFile *elf) {
+    return (elf->elf_class==ELFCLASS_32) ? elf->ehdr32->e_shnum : elf->ehdr64->e_shnum;
+}
+const char *elf_section_name(const ElfFile *elf, size_t idx) {
+    if (elf->elf_class==ELFCLASS_32) {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+        Elf32_Shdr *strtab = &shdr[elf->ehdr32->e_shstrndx];
+        return (const char *)elf->mem + strtab->sh_offset + shdr[idx].sh_name;
+    } else {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+        Elf64_Shdr *strtab = &shdr[elf->ehdr64->e_shstrndx];
+        return (const char *)elf->mem + strtab->sh_offset + shdr[idx].sh_name;
+    }
+}
+uint32_t elf_section_type(const ElfFile *elf, size_t idx) {
+    if (elf->elf_class==ELFCLASS_32) {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+        return shdr[idx].sh_type;
+    } else {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+        return shdr[idx].sh_type;
+    }
+}
+uint64_t elf_section_addr(const ElfFile *elf, size_t idx) {
+    if (elf->elf_class==ELFCLASS_32) {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+        return shdr[idx].sh_addr;
+    } else {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+        return shdr[idx].sh_addr;
+    }
+}
+uint64_t elf_section_offset(const ElfFile *elf, size_t idx) {
+    if (elf->elf_class==ELFCLASS_32) {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+        return shdr[idx].sh_offset;
+    } else {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+        return shdr[idx].sh_offset;
+    }
+}
+uint64_t elf_section_size(const ElfFile *elf, size_t idx) {
+    if (elf->elf_class==ELFCLASS_32) {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+        return shdr[idx].sh_size;
+    } else {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+        return shdr[idx].sh_size;
+    }
+}
+
+// --- Simbolos ---
+size_t elf_symbol_count(const ElfFile *elf, size_t *symtab_idx) {
+    size_t n = elf_section_count(elf);
+    for (size_t i=0; i<n; ++i) {
+        if (elf_section_type(elf, i)==SHT_SYMTAB) {
+            if (symtab_idx) *symtab_idx = i;
+            uint64_t entsize = elf_section_size(elf, i);
+            uint64_t size = elf_section_size(elf, i);
+            return entsize ? size / entsize : 0;
+        }
+    }
+    if (symtab_idx) *symtab_idx = (size_t)-1;
+    return 0;
+}
+const char *elf_symbol_name(const ElfFile *elf, size_t symtab_idx, size_t sym_idx) {
+    if (elf->elf_class==ELFCLASS_32) {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+        Elf32_Shdr *symtab = &shdr[symtab_idx];
+        Elf32_Shdr *strtab = &shdr[symtab->sh_link];
+        Elf32_Sym *syms = (Elf32_Sym *)((uint8_t *)elf->mem + symtab->sh_offset);
+        return (const char *)elf->mem + strtab->sh_offset + syms[sym_idx].st_name;
+    } else {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+        Elf64_Shdr *symtab = &shdr[symtab_idx];
+        Elf64_Shdr *strtab = &shdr[symtab->sh_link];
+        Elf64_Sym *syms = (Elf64_Sym *)((uint8_t *)elf->mem + symtab->sh_offset);
+        return (const char *)elf->mem + strtab->sh_offset + syms[sym_idx].st_name;
+    }
+}
+uint64_t elf_symbol_value(const ElfFile *elf, size_t symtab_idx, size_t sym_idx) {
+    if (elf->elf_class==ELFCLASS_32) {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+        Elf32_Shdr *symtab = &shdr[symtab_idx];
+        Elf32_Sym *syms = (Elf32_Sym *)((uint8_t *)elf->mem + symtab->sh_offset);
+        return syms[sym_idx].st_value;
+    } else {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+        Elf64_Shdr *symtab = &shdr[symtab_idx];
+        Elf64_Sym *syms = (Elf64_Sym *)((uint8_t *)elf->mem + symtab->sh_offset);
+        return syms[sym_idx].st_value;
+    }
+}
+uint8_t elf_symbol_info(const ElfFile *elf, size_t symtab_idx, size_t sym_idx) {
+    if (elf->elf_class==ELFCLASS_32) {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+        Elf32_Shdr *symtab = &shdr[symtab_idx];
+        Elf32_Sym *syms = (Elf32_Sym *)((uint8_t *)elf->mem + symtab->sh_offset);
+        return syms[sym_idx].st_info;
+    } else {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+        Elf64_Shdr *symtab = &shdr[symtab_idx];
+        Elf64_Sym *syms = (Elf64_Sym *)((uint8_t *)elf->mem + symtab->sh_offset);
+        return syms[sym_idx].st_info;
+    }
+}
+
+// --- Relocaciones ---
+size_t elf_relocation_count(const ElfFile *elf, size_t rel_idx) {
+    if (elf->elf_class==ELFCLASS_32) {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+        return shdr[rel_idx].sh_size / shdr[rel_idx].sh_entsize;
+    } else {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+        return shdr[rel_idx].sh_size / shdr[rel_idx].sh_entsize;
+    }
+}
+void elf_get_relocation(const ElfFile *elf, size_t rel_idx, size_t rel_ent,
+                        uint64_t *offset, uint32_t *type, int *sym_idx) {
+    if (elf->elf_class==ELFCLASS_32) {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+        Elf32_Rel *rels = (Elf32_Rel *)((uint8_t *)elf->mem + shdr[rel_idx].sh_offset);
+        *offset = rels[rel_ent].r_offset;
+        *type = rels[rel_ent].r_info & 0xff;
+        *sym_idx = rels[rel_ent].r_info >> 8;
+    } else {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+        Elf64_Rel *rels = (Elf64_Rel *)((uint8_t *)elf->mem + shdr[rel_idx].sh_offset);
+        *offset = rels[rel_ent].r_offset;
+        *type = rels[rel_ent].r_info & 0xffffffff;
+        *sym_idx = rels[rel_ent].r_info >> 32;
+    }
+}
+
+// --- Librerias requeridas (DT_NEEDED) ---
+size_t elf_needed_count(const ElfFile *elf) {
+    // Busca SHT_DYNAMIC y cuenta DT_NEEDED
+    size_t n = elf_section_count(elf), count=0;
+    for (size_t i=0; i<n; ++i) {
+        if (elf_section_type(elf, i)==6) { // SHT_DYNAMIC
+            if (elf->elf_class==ELFCLASS_32) {
+                Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+                Elf32_Dyn *dyn = (Elf32_Dyn *)((uint8_t *)elf->mem + shdr[i].sh_offset);
+                size_t nent = shdr[i].sh_size/sizeof(Elf32_Dyn);
+                for (size_t j=0; j<nent; ++j) if (dyn[j].d_tag==1) ++count;
+            } else {
+                Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+                Elf64_Dyn *dyn = (Elf64_Dyn *)((uint8_t *)elf->mem + shdr[i].sh_offset);
+                size_t nent = shdr[i].sh_size/sizeof(Elf64_Dyn);
+                for (size_t j=0; j<nent; ++j) if (dyn[j].d_tag==1) ++count;
+            }
+        }
+    }
+    return count;
+}
+const char *elf_needed_name(const ElfFile *elf, size_t idx) {
+    // Busca SHT_DYNAMIC y devuelve el nombre idx-ésimo DT_NEEDED
+    size_t n = elf_section_count(elf), count=0;
+    for (size_t i=0; i<n; ++i) {
+        if (elf_section_type(elf, i)==6) { // SHT_DYNAMIC
+            if (elf->elf_class==ELFCLASS_32) {
+                Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+                Elf32_Dyn *dyn = (Elf32_Dyn *)((uint8_t *)elf->mem + shdr[i].sh_offset);
+                Elf32_Shdr *strtab = NULL;
+                for (size_t j=0; j<n; ++j)
+                    if (elf_section_type(elf, j)==3 && strcmp(elf_section_name(elf, j), ".dynstr")==0)
+                        strtab = &shdr[j];
+                if (!strtab) continue;
+                const char *base = (const char *)elf->mem + strtab->sh_offset;
+                size_t nent = shdr[i].sh_size/sizeof(Elf32_Dyn);
+                for (size_t j=0; j<nent; ++j) {
+                    if (dyn[j].d_tag==1) {
+                        if (count==idx) return base + dyn[j].d_un.d_val;
+                        ++count;
+                    }
+                }
+            } else {
+                Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+                Elf64_Dyn *dyn = (Elf64_Dyn *)((uint8_t *)elf->mem + shdr[i].sh_offset);
+                Elf64_Shdr *strtab = NULL;
+                for (size_t j=0; j<n; ++j)
+                    if (elf_section_type(elf, j)==3 && strcmp(elf_section_name(elf, j), ".dynstr")==0)
+                        strtab = &shdr[j];
+                if (!strtab) continue;
+                const char *base = (const char *)elf->mem + strtab->sh_offset;
+                size_t nent = shdr[i].sh_size/sizeof(Elf64_Dyn);
+                for (size_t j=0; j<nent; ++j) {
+                    if (dyn[j].d_tag==1) {
+                        if (count==idx) return base + dyn[j].d_un.d_val;
+                        ++count;
+                    }
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
+// --- Strings ---
+void elf_iterate_strings(const ElfFile *elf, void (*cb)(const char *str, void *user), void *user) {
+    size_t n = elf_section_count(elf);
+    for (size_t i=0; i<n; ++i) {
+        if (elf_section_type(elf, i)==SHT_STRTAB) {
+            const char *base = (const char *)elf->mem + elf_section_offset(elf, i);
+            size_t size = elf_section_size(elf, i), j=0;
+            while (j<size) {
+                if (base[j]) {
+                    cb(&base[j], user);
+                    j += strlen(&base[j]);
+                }
+                ++j;
+            }
+        }
+    }
 }
 
 #endif

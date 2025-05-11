@@ -423,7 +423,7 @@ typedef struct __BASE_RELOC_ENTRY {
 
 #pragma pack(pop)
 
-// Definición de la estructura PE64FILE
+// Definicion de la estructura PE64FILE
 typedef struct {
     char* NAME;
     FILE* Ppefile;
@@ -481,13 +481,13 @@ typedef struct {
     ___IMAGE_DATA_DIRECTORY PEFILE_DELAY_IMPORT_DIRECTORY;
     ___IMAGE_DATA_DIRECTORY PEFILE_COM_DESCRIPTOR_DIRECTORY;
 
-    // Encabezados de sección
+    // Encabezados de seccion
     ___PIMAGE_SECTION_HEADER PEFILE_SECTION_HEADERS;
 
-    // Tabla de importación
+    // Tabla de importacion
     ___PIMAGE_IMPORT_DESCRIPTOR PEFILE_IMPORT_TABLE;
     
-    // Tabla de reubicación base
+    // Tabla de reubicacion base
     ___PIMAGE_BASE_RELOCATION PEFILE_BASERELOC_TABLE;
 } PE64FILE;
 

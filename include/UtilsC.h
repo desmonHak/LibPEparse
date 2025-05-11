@@ -19,9 +19,9 @@ int free_reserved_memory(void* addr, size_t size);
 void* map_segment(void* desired_addr, size_t size, int prot, int flags, int fd, off_t offset);
 
 #define MAP_PRIVATE_   0x02  // Cambios no se propagan al archivo original
-#define MAP_ANONYMOUS_ 0x20  // No se mapea desde un archivo, sino memoria anónima
-#define MAP_FIXED_     0x10  // Mapea exactamente en la dirección dada (opcional en la función)
+#define MAP_ANONYMOUS_ 0x20  // No se mapea desde un archivo, sino memoria anonima
+#define MAP_FIXED_     0x10  // Mapea exactamente en la direccion dada (opcional en la funcion)
 
-#define PAGE_SIZE 4096  // Tamaño típico de una página de memoria
+#define PAGE_SIZE 4096  // Tamaño tipico de una página de memoria
 
 #endif //UTILSC_H

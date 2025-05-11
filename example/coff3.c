@@ -38,8 +38,8 @@ int main() {
         [1] = create_section(".data", IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE, dataContent, sizeof(dataContent), NULL, 0)
     };
 
-    uint32_t printf_reloc_offset = 8;  // Offset de la instrucción mov rax, imm64
-    uint32_t format_string_reloc_offset = 24;  // Offset de la instrucción lea rcx, [rip+disp32]
+    uint32_t printf_reloc_offset = 8;  // Offset de la instruccion mov rax, imm64
+    uint32_t format_string_reloc_offset = 24;  // Offset de la instruccion lea rcx, [rip+disp32]
 
     add_relocation(&sections[0], create_relocation(printf_reloc_offset, 1, IMAGE_REL_AMD64_ADDR64));
     add_relocation(&sections[0], create_relocation(format_string_reloc_offset, 0, IMAGE_REL_AMD64_REL32));

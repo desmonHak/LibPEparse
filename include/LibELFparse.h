@@ -17,7 +17,7 @@
     #define PROT_WRITE  0x2  // Permite escritura
 #endif
 #ifndef PROT_EXEC
-    #define PROT_EXEC   0x4  // Permite ejecución
+    #define PROT_EXEC   0x4  // Permite ejecucion
 #endif
 
 #define PF_X 0x1  // Ejecutable
@@ -27,39 +27,45 @@
 
 
 // https://wiki.osdev.org/ELF_Tutorial
+// https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.eheader.html
 /**
  * El formato de archivo ELF está diseñado para funcionar en diversas arquitecturas,
  * muchas de las cuales admiten distintos anchos de datos. Para su compatibilidad
  * con varios tipos de máquinas, el formato ELF proporciona una serie de directrices
- * para tipos de ancho fijo que conforman el diseño de la sección y los datos
+ * para tipos de ancho fijo que conforman el diseño de la seccion y los datos
  * representados en los archivos de objeto. Puede optar por nombrar sus tipos de
  * forma diferente o usar directamente los tipos definidos en stdint.h, pero deben
  * cumplir con los mostrados anteriormente.
  */
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef uint16_t Elf32_Half;	// Mitad sin signo
 typedef uint32_t Elf32_Off;	    // Unsigned offset  / Desplazamiento sin signo
-typedef uint32_t Elf32_Addr;	// Unsigned address / Dirección sin signo
+typedef uint32_t Elf32_Addr;	// Unsigned address / Direccion sin signo
 typedef uint32_t Elf32_Word;	// Unsigned int     / Entero sin signo
 typedef int32_t  Elf32_Sword;	// Signed int       / Entero con signo
 
 typedef int64_t  Elf64_Sword;	// Signed int       / Entero con signo
 typedef uint64_t Elf64_Word;	// Unsigned int     / Entero sin signo
-typedef uint64_t Elf64_Addr;	// Unsigned address / Dirección sin signo
+typedef uint64_t Elf64_Addr;	// Unsigned address / Direccion sin signo
 typedef uint64_t Elf64_Off;	    // Unsigned offset  / Desplazamiento sin signo
 typedef uint32_t Elf64_Half;	// Mitad sin signo
 
 /**
- * El encabezado ELF es el primero de un archivo ELF y proporciona información importante sobre
+ * El encabezado ELF es el primero de un archivo ELF y proporciona informacion importante sobre
  * el archivo (como el tipo de máquina, la arquitectura y el orden de bytes, etc.),
  * además de permitir identificarlo y comprobar su validez. El encabezado ELF también
- * proporciona información sobre otras secciones del archivo, ya que pueden aparecer
+ * proporciona informacion sobre otras secciones del archivo, ya que pueden aparecer
  * en cualquier orden, variar en tamaño o incluso estar ausentes. Los primeros 4 bytes
  * (el número mágico) son comunes a todos los archivos ELF y se utilizan para identificar
  * el archivo. Al trabajar con el archivo mediante el tipo Elf32_Header definido
- * anteriormente, estos 4 bytes son accesibles desde los índices 0-3 del campo e_ident.
+ * anteriormente, estos 4 bytes son accesibles desde los indices 0-3 del campo e_ident.
  */
 enum Elf_Ident {
     EI_MAG0		    = 0, // 0x7F
@@ -75,12 +81,32 @@ enum Elf_Ident {
     EI_NIDENT       = 16 // Size of e_ident[]
 };
 
+typedef enum {
+    ELFOSABI_NONE      = 0,   // No extensions or unspecified
+    ELFOSABI_HPUX      = 1,   // Hewlett-Packard HP-UX
+    ELFOSABI_NETBSD    = 2,   // NetBSD
+    ELFOSABI_LINUX     = 3,   // Linux
+    ELFOSABI_SOLARIS   = 6,   // Sun Solaris
+    ELFOSABI_AIX       = 7,   // AIX
+    ELFOSABI_IRIX      = 8,   // IRIX
+    ELFOSABI_FREEBSD   = 9,   // FreeBSD
+    ELFOSABI_TRU64     = 10,  // Compaq TRU64 UNIX
+    ELFOSABI_MODESTO   = 11,  // Novell Modesto
+    ELFOSABI_OPENBSD   = 12,  // Open BSD
+    ELFOSABI_OPENVMS   = 13,  // Open VMS
+    ELFOSABI_NSK       = 14   // Hewlett-Packard Non-Stop Kernel
+    // 64–255 reserved for architecture-specific values
+} ElfOSABI;
+
+
 #define ELFMAG0	0x7F // e_ident[EI_MAG0]
 #define ELFMAG1	'E'  // e_ident[EI_MAG1]
 #define ELFMAG2	'L'  // e_ident[EI_MAG2]
 #define ELFMAG3	'F'  // e_ident[EI_MAG3]
 
-#define ELFDATA2LSB (1)  // Little Endian
+#define ELFDATANONE  (0)  // Invalid data encoding
+#define ELFDATA2LSB  (1)  // Little Endian
+#define ELFDATA2MSB  (2)  // Big Endian
 
 #define ELFCLASSNONE (0)
 #define ELFCLASS32	 (1)  // 32-bit Architecture
@@ -88,9 +114,9 @@ enum Elf_Ident {
 
 /**
  * El primer campo del encabezado consta de 16 bytes, muchos de los cuales proporcionan
- * información importante sobre el archivo ELF, como la arquitectura prevista,
- * el orden de bytes y la información de la ABI. Dado que este tutorial se centra
- * en la implementación de un cargador compatible con x86, solo se han incluido
+ * informacion importante sobre el archivo ELF, como la arquitectura prevista,
+ * el orden de bytes y la informacion de la ABI. Dado que este tutorial se centra
+ * en la implementacion de un cargador compatible con x86, solo se han incluido
  * las definiciones de valores relevantes.
  */
 enum Elf_Type {
@@ -193,9 +219,9 @@ enum Elf_Type {
 #define ELF_NIDENT	16
 
 /**
- * El formato de archivo ELF solo tiene un encabezado con ubicación fija:
+ * El formato de archivo ELF solo tiene un encabezado con ubicacion fija:
  * el encabezado ELF, presente al principio de cada archivo. El formato es
- * extremadamente flexible, ya que la ubicación, el tamaño y la función de cada
+ * extremadamente flexible, ya que la ubicacion, el tamaño y la funcion de cada
  * encabezado (excepto el ELF) se describen en otro encabezado del archivo.
  */
 typedef struct Elf32_Header {
@@ -243,11 +269,11 @@ typedef struct Elf64_Header {
 
 /**
  * El formato ELF define numerosos tipos de secciones y sus encabezados correspondientes.
- * No todos están presentes en todos los archivos y no se garantiza su orden de aparición.
+ * No todos están presentes en todos los archivos y no se garantiza su orden de aparicion.
  * Por lo tanto, para analizar y procesar estas secciones, el formato también define
- * encabezados de sección, que contienen información como nombres, tamaños,
+ * encabezados de seccion, que contienen informacion como nombres, tamaños,
  * ubicaciones y otros datos relevantes. La lista de todos los encabezados
- * de sección en una imagen ELF se denomina tabla de encabezados de sección.
+ * de seccion en una imagen ELF se denomina tabla de encabezados de seccion.
  */
 typedef struct Elf32_Shdr {
     Elf32_Word	sh_name;
@@ -277,13 +303,13 @@ typedef struct Elf64_Shdr {
 
 
 /**
- * La tabla de encabezados de sección contiene varios campos importantes, algunos de
- * los cuales tienen significados diferentes para cada sección. Otro punto
+ * La tabla de encabezados de seccion contiene varios campos importantes, algunos de
+ * los cuales tienen significados diferentes para cada seccion. Otro punto
  * interesante es que el campo sh_name no apunta directamente a una cadena,
  * sino que proporciona el desplazamiento de una cadena en la tabla de cadenas
- * de nombres de sección (el índice de la tabla se define en el encabezado
- * ELF mediante el campo e_shstrndx). Cada encabezado también define la posición
- * de la sección en la imagen del archivo en el campo sh_offset, como
+ * de nombres de seccion (el indice de la tabla se define en el encabezado
+ * ELF mediante el campo e_shstrndx). Cada encabezado también define la posicion
+ * de la seccion en la imagen del archivo en el campo sh_offset, como
  * desplazamiento desde el inicio del archivo.
  */
 # define SHN_UNDEF	(0x00) // Undefined/Not Present
@@ -301,9 +327,9 @@ enum ShT_Types {
 
 /**
  * Arriba se muestran varias constantes relevantes para el tutorial
- * (existen muchas más). La enumeración ShT_Types define diferentes tipos de secciones,
+ * (existen muchas más). La enumeracion ShT_Types define diferentes tipos de secciones,
  * que corresponden a los valores almacenados en el campo sh_type del encabezado
- * de sección. De forma similar, ShT_Attributes corresponde al campo sh_flags,
+ * de seccion. De forma similar, ShT_Attributes corresponde al campo sh_flags,
  * pero son indicadores de bits en lugar de valores independientes.
  */
 enum ShT_Attributes {
@@ -326,12 +352,12 @@ static inline size_t Elf64_get_number_sections(Elf64_Header *hdr) {
 
 
 /**
- * Acceder al encabezado de sección no es muy difícil:
- * su posición en la imagen de archivo se define mediante e_shoff
- * en el encabezado ELF, y el número de encabezados de sección se define a su vez
+ * Acceder al encabezado de seccion no es muy dificil:
+ * su posicion en la imagen de archivo se define mediante e_shoff
+ * en el encabezado ELF, y el número de encabezados de seccion se define a su vez
  * mediante e_shnum. Cabe destacar que la primera entrada del encabezado de
- * sección es nula; es decir, los campos del encabezado son 0.
- * Los encabezados de sección son continuos, por lo que, dado un puntero a la
+ * seccion es nula; es decir, los campos del encabezado son 0.
+ * Los encabezados de seccion son continuos, por lo que, dado un puntero a la
  * primera entrada, se puede acceder a las entradas posteriores mediante
  * operaciones simples con punteros o matrices.
  *
@@ -370,25 +396,25 @@ static inline Elf64_Shdr *elf64_section(Elf64_Header *hdr, uint16_t  idx) {
 
 
 /**
- * Un procedimiento importante es acceder a los nombres de sección (ya que,
- * como se mencionó anteriormente, el encabezado solo proporciona un desplazamiento
- * en la tabla de cadenas de nombres de sección), lo cual también es bastante sencillo.
- * La operación completa se puede resumir en una serie de pasos simples:
+ * Un procedimiento importante es acceder a los nombres de seccion (ya que,
+ * como se menciono anteriormente, el encabezado solo proporciona un desplazamiento
+ * en la tabla de cadenas de nombres de seccion), lo cual también es bastante sencillo.
+ * La operacion completa se puede resumir en una serie de pasos simples:
  *
- * 1 Obtener el índice del encabezado de sección para la tabla de cadenas desde el encabezado ELF
- *      (almacenado en e_shstrndx). Asegúrese de comparar el índice con SHN_UNDEF, ya que
- *      la tabla podría no estar presente.
+ * 1 Obtener el indice del encabezado de seccion para la tabla de cadenas desde el encabezado ELF
+ *      (almacenado en e_shstrndx). Asegúrese de comparar el indice con SHN_UNDEF, ya que
+ *      la tabla podria no estar presente.
  *
- * 2 Acceder al encabezado de sección en el índice dado y encontrar el desplazamiento
+ * 2 Acceder al encabezado de seccion en el indice dado y encontrar el desplazamiento
  *      de la tabla (almacenado en sh_offset).
  *
- * 3 Calcular la posición de la tabla de cadenas en memoria utilizando el desplazamiento.
+ * 3 Calcular la posicion de la tabla de cadenas en memoria utilizando el desplazamiento.
  *
  * 4 Crear un puntero al desplazamiento del nombre en la tabla de cadenas.
  *
  *
- * Tenga en cuenta que antes de intentar acceder al nombre de una sección, primero
- * debe verificar que la sección tenga un nombre (el desplazamiento dado por sh_name
+ * Tenga en cuenta que antes de intentar acceder al nombre de una seccion, primero
+ * debe verificar que la seccion tenga un nombre (el desplazamiento dado por sh_name
  * no es igual a SHN_UNDEF).
  *
  * @param hdr  puntero a un ELF.
@@ -418,13 +444,13 @@ static inline char *elf64_lookup_string(Elf64_Header *hdr, int offset) {
 
 
 /**
- * La tabla de símbolos es una sección (o varias secciones) que existe
- * dentro del archivo ELF y define la ubicación, el tipo, la visibilidad y
- * otras características de los diversos símbolos declarados en el código
- * fuente original, creados durante la compilación o el enlace, o presentes
+ * La tabla de simbolos es una seccion (o varias secciones) que existe
+ * dentro del archivo ELF y define la ubicacion, el tipo, la visibilidad y
+ * otras caracteristicas de los diversos simbolos declarados en el codigo
+ * fuente original, creados durante la compilacion o el enlace, o presentes
  * de otro modo en el archivo. Dado que un objeto ELF puede tener varias
- * tablas de símbolos, es necesario iterar sobre los encabezados de sección
- * del archivo o seguir una referencia desde otra sección para acceder a una.
+ * tablas de simbolos, es necesario iterar sobre los encabezados de seccion
+ * del archivo o seguir una referencia desde otra seccion para acceder a una.
  */
 typedef struct Elf32_Sym {
     Elf32_Word		st_name;
@@ -438,18 +464,28 @@ typedef struct Elf32_Sym {
     Elf32_Half		st_shndx;
 } Elf32_Sym;
 
+typedef struct Elf64_Sym {
+    Elf64_Word  st_name;   // indice en la tabla de strings del nombre del simbolo
+    uint8_t     st_info;   // Tipo y vinculacion del simbolo
+    uint8_t     st_other;  // Visibilidad del simbolo
+    Elf64_Half  st_shndx;  // indice de la seccion a la que pertenece el simbolo
+    Elf64_Addr  st_value;  // Valor del simbolo (direccion)
+    Elf64_Word  st_size;   // Tamaño del objeto (si aplica)
+} Elf64_Sym;
+
+
 /*
- * Cada entrada de la tabla de símbolos contiene información importante, como el
- * nombre del símbolo (st_name, que puede ser STN_UNDEF), el valor del
- * símbolo (st_value, que puede ser la dirección absoluta o relativa del valor)
- * y el campo st_info, que contiene tanto el tipo de símbolo como su enlace.
- * Cabe destacar que la primera entrada de cada tabla de símbolos es nula,
+ * Cada entrada de la tabla de simbolos contiene informacion importante, como el
+ * nombre del simbolo (st_name, que puede ser STN_UNDEF), el valor del
+ * simbolo (st_value, que puede ser la direccion absoluta o relativa del valor)
+ * y el campo st_info, que contiene tanto el tipo de simbolo como su enlace.
+ * Cabe destacar que la primera entrada de cada tabla de simbolos es nula,
  * por lo que todos sus campos son 0.
  *
- * Como se mencionó anteriormente, st_info contiene tanto el tipo de símbolo como
- * la vinculación, por lo que las dos macros anteriores proporcionan acceso a
- * los valores individuales. La enumeración StT_Types proporciona varios tipos
- * de símbolo posibles, y StB_Bindings proporciona posibles vinculaciones de símbolos.
+ * Como se menciono anteriormente, st_info contiene tanto el tipo de simbolo como
+ * la vinculacion, por lo que las dos macros anteriores proporcionan acceso a
+ * los valores individuales. La enumeracion StT_Types proporciona varios tipos
+ * de simbolo posibles, y StB_Bindings proporciona posibles vinculaciones de simbolos.
  *
  */
 
@@ -458,23 +494,33 @@ typedef struct Elf32_Sym {
  * @param INFO campo st_info
  */
 #define ELF32_ST_BIND(INFO)	((INFO) >> 4)
+#define ELF64_ST_BIND ELF32_ST_BIND
 
 /**
  * Permite obtener el tipo de simbolo del campo st_info
  * @param INFO campo st_info
  */
 #define ELF32_ST_TYPE(INFO)	((INFO) & 0x0F)
+#define ELF64_ST_TYPE ELF32_ST_TYPE
 
+// Crea un valor st_info combinando binding y type
+#define ELF32_ST_INFO(bind, type) (((bind) << 4) + ((type) & 0x0F))
+#define ELF64_ST_INFO ELF32_ST_INFO
+
+// Vinculacion
 enum StT_Bindings {
     STB_LOCAL		= 0, // Local scope
     STB_GLOBAL		= 1, // Global scope
     STB_WEAK		= 2  // Weak, (ie. __attribute__((weak)))
 };
 
+// Tipo de simbolo
 enum StT_Types {
-    STT_NOTYPE		= 0, // No type
-    STT_OBJECT		= 1, // Variables, arrays, etc.
-    STT_FUNC		= 2  // Methods or functions
+    STT_NOTYPE,    // Tipo desconocido
+    STT_OBJECT,    // Variable
+    STT_FUNC,      // Funcion
+    STT_SECTION,   // Marca una seccion
+    STT_FILE,      // Nombre de archivo
 };
 
 /**
@@ -484,7 +530,7 @@ enum StT_Types {
  * Los literales de cadena utilizados en el programa se almacenan en una de las tablas.
  * Existen diversas tablas de cadenas que pueden estar presentes en un objeto ELF, como
  * .strtab (la tabla de cadenas predeterminada),
- * .shstrtab (la tabla de cadenas de sección) y
+ * .shstrtab (la tabla de cadenas de seccion) y
  * .dynstr (tabla de cadenas para enlaces dinámicos).
  *
  * Cada vez que el proceso de carga necesita acceder a una cadena,
@@ -492,42 +538,42 @@ enum StT_Types {
  * Este desplazamiento puede apuntar al principio de una cadena terminada
  * en cero, a un punto intermedio o incluso al propio terminador en cero,
  * según el uso y el escenario. El tamaño de la tabla de cadenas se especifica
- * mediante sh_size en la entrada de encabezado de sección correspondiente.
+ * mediante sh_size en la entrada de encabezado de seccion correspondiente.
  *
  * El cargador de programas más simple puede copiar todas las tablas de cadenas en
- * la memoria, pero una solución más completa omitiría cualquiera que no sea necesaria
- * durante el tiempo de ejecución, especialmente aquellas que no están marcadas
- * con SHF_ALLOC en su encabezado de sección respectivo (como
- * .shstrtab, ya que los nombres de sección no se usan en el tiempo de ejecución del programa).
+ * la memoria, pero una solucion más completa omitiria cualquiera que no sea necesaria
+ * durante el tiempo de ejecucion, especialmente aquellas que no están marcadas
+ * con SHF_ALLOC en su encabezado de seccion respectivo (como
+ * .shstrtab, ya que los nombres de seccion no se usan en el tiempo de ejecucion del programa).
  */
 
 /**
- * Secciones de Reubicación
- * Los archivos ELF reubicables tienen múltiples usos en la programación del kernel,
- * especialmente como módulos y controladores que se pueden cargar al inicio.
- * Son especialmente útiles porque son independientes de la posición, por lo que pueden
- * colocarse fácilmente después del kernel o a partir de una dirección conveniente,
+ * Secciones de Reubicacion
+ * Los archivos ELF reubicables tienen múltiples usos en la programacion del kernel,
+ * especialmente como modulos y controladores que se pueden cargar al inicio.
+ * Son especialmente útiles porque son independientes de la posicion, por lo que pueden
+ * colocarse fácilmente después del kernel o a partir de una direccion conveniente,
  * y no requieren su propio espacio de direcciones para funcionar.
  *
- * El proceso de reubicación en sí es conceptualmente simple, pero puede complicarse con
- * la introducción de tipos de reubicación complejos.
+ * El proceso de reubicacion en si es conceptualmente simple, pero puede complicarse con
+ * la introduccion de tipos de reubicacion complejos.
  *
- * La reubicación comienza con una tabla de entradas de reubicación,
- * que se pueden localizar mediante el encabezado de sección correspondiente.
+ * La reubicacion comienza con una tabla de entradas de reubicacion,
+ * que se pueden localizar mediante el encabezado de seccion correspondiente.
  *
- * Existen dos tipos diferentes de estructuras de reubicación:
- * una con un añadido explícito (tipo de sección SHT_RELA) y otra sin él
- * (tipo de sección SHT_REL).
+ * Existen dos tipos diferentes de estructuras de reubicacion:
+ * una con un añadido explicito (tipo de seccion SHT_RELA) y otra sin él
+ * (tipo de seccion SHT_REL).
  *
- * Los enteros de reubicación en la tabla son continuos y el número de entradas en
+ * Los enteros de reubicacion en la tabla son continuos y el número de entradas en
  * una tabla dada se puede calcular dividiendo el tamaño de la tabla
- * (dado por sh_size en el encabezado de sección) por el tamaño de
+ * (dado por sh_size en el encabezado de seccion) por el tamaño de
  * cada entrada (dado por sh_entsize).
  *
- * Cada tabla de reubicación es específica de una sola sección,
- * por lo que un solo archivo puede tener varias tablas de reubicación
+ * Cada tabla de reubicacion es especifica de una sola seccion,
+ * por lo que un solo archivo puede tener varias tablas de reubicacion
  * (pero todas las entradas dentro de una tabla determinada serán del
- * mismo tipo de estructura de reubicación).
+ * mismo tipo de estructura de reubicacion).
  */
 typedef struct Elf32_Rel {
     Elf32_Addr		r_offset;
@@ -540,40 +586,59 @@ typedef struct Elf32_Rela {
     Elf32_Sword		r_addend;
 } Elf32_Rela;
 
+
+typedef struct {
+    Elf64_Addr  r_offset;   // Direccion donde aplicar la reubicacion
+    Elf64_Word r_info;     // Tipo y simbolo relacionados con la reubicacion
+} Elf64_Rel;
+
+typedef struct {
+    Elf64_Addr  r_offset;   // Direccion donde aplicar la reubicacion
+    Elf64_Word r_info;     // Tipo y simbolo relacionados con la reubicacion
+    Elf64_Sword r_addend;  // Valor constante adicional
+} Elf64_Rela;
+
+
 /*
  * Las definiciones anteriores corresponden a los diferentes tipos de estructura
  * para reubicaciones.
  * Cabe destacar el valor almacenado en r_info, ya que el byte superior
- * designa la entrada en la tabla de símbolos a la que se aplica la
- * reubicación, mientras que el byte inferior almacena el tipo de reubicación
+ * designa la entrada en la tabla de simbolos a la que se aplica la
+ * reubicacion, mientras que el byte inferior almacena el tipo de reubicacion
  * que debe aplicarse. Tenga en cuenta que un archivo ELF puede tener
- * varias tablas de símbolos; por lo tanto, el índice de la tabla de
- * encabezado de sección que hace referencia a la tabla de símbolos a
+ * varias tablas de simbolos; por lo tanto, el indice de la tabla de
+ * encabezado de seccion que hace referencia a la tabla de simbolos a
  * la que se aplican estas reubicaciones se encuentra en el campo sh_link
- * del encabezado de sección de esta tabla de reubicación.
- * El valor en r_offset indica la posición relativa del símbolo que se está
- * reubicando dentro de su sección.
+ * del encabezado de seccion de esta tabla de reubicacion.
+ * El valor en r_offset indica la posicion relativa del simbolo que se está
+ * reubicando dentro de su seccion.
  */
 
 /**
- * entrada en la tabla de símbolos a la que se aplica la reubicación
+ * entrada en la tabla de simbolos a la que se aplica la reubicacion
  * @param INFO campo r_info
  */
-# define ELF32_R_SYM(INFO)	((INFO) >> 8)
-
+#define ELF32_R_SYM(INFO)	((INFO) >> 8)
+#define ELF64_R_SYM(INFO)   ((INFO) >> 32)
 /**
  * tipo de re-ubicacion que debe asignarse.
  * @param INFO campo r_info
  */
-# define ELF32_R_TYPE(INFO)	((uint8_t)(INFO))
+#define ELF32_R_TYPE(INFO)	((uint8_t)(INFO))
+#define ELF64_R_TYPE(INFO)  ((INFO) & 0xFFFFFFFFL)
+
+
+#define ELF64_R_INFO(sym, ttype) (((uint64_t)(sym) << 32) + ((type) & 0xFFFFFFFFL))
+#define ELF32_R_INFO(sym, type) (((sym) << 8) + (uint8_t)(type))
+
 
 /**
- * Como se mencionó anteriormente, el campo r_info en Elf32_Rel(a)
+ * Como se menciono anteriormente, el campo r_info en Elf32_Rel(a)
  * hace referencia a dos valores distintos; por lo tanto, el conjunto de
  * macrofunciones anterior puede utilizarse para obtener los valores
- * individuales: ELF32_R_SYM() proporciona acceso al índice del símbolo
- * y ELF32_R_TYPE() proporciona acceso al tipo de reubicación. La enumeración
- * RtT_Types define los tipos de reubicación que abarcará este tutorial.
+ * individuales: ELF32_R_SYM() proporciona acceso al indice del simbolo
+ * y ELF32_R_TYPE() proporciona acceso al tipo de reubicacion. La enumeracion
+ * RtT_Types define los tipos de reubicacion que abarcará este tutorial.
  */
 enum RtT_Types {
     R_386_NONE		= 0, // No relocation
@@ -582,10 +647,10 @@ enum RtT_Types {
 };
 
 /**
- * El encabezado del programa es una estructura que define información
- * sobre el comportamiento del programa ELF una vez cargado, así como
- * información de enlace en tiempo de ejecución. Los encabezados de programa
- * ELF (al igual que los encabezados de sección) se agrupan para formar la
+ * El encabezado del programa es una estructura que define informacion
+ * sobre el comportamiento del programa ELF una vez cargado, asi como
+ * informacion de enlace en tiempo de ejecucion. Los encabezados de programa
+ * ELF (al igual que los encabezados de seccion) se agrupan para formar la
  * tabla de encabezados de programa.
  *
  * La tabla de encabezados de programa contiene un conjunto continuo de
@@ -596,8 +661,8 @@ enum RtT_Types {
  * El encabezado define varios campos útiles como p_type,
  * que distingue entre encabezados; p_offset, que almacena el
  * desplazamiento hasta el segmento al que se refiere el encabezado;
- * y p_vaddr, que define la dirección donde debe existir el código
- * dependiente de la posición.
+ * y p_vaddr, que define la direccion donde debe existir el codigo
+ * dependiente de la posicion.
  */
 typedef struct Elf32_Phdr {
     Elf32_Word		p_type;
@@ -641,8 +706,46 @@ static inline Elf64_Phdr *elf64_getProgramHeaderTable(Elf64_Header *file)
 	return (Elf64_Phdr*) (((uintptr_t) file) + file->e_phoff);
 }
 
+// valores para Elf64_Dyn/Elf32_Dyn . d_tag
+#define DT_NULL         0   // Marca el final de la seccion dinámica
+#define DT_NEEDED       1   // Nombre de una biblioteca necesaria
+#define DT_PLTRELSZ     2   // Tamaño en bytes de las entradas de reubicacion del PLT
+#define DT_PLTGOT       3   // Direccion de la tabla GOT utilizada por el PLT
+#define DT_HASH         4   // Direccion de la tabla hash de simbolos
+#define DT_STRTAB       5   // Direccion de la tabla de cadenas
+#define DT_SYMTAB       6   // Direccion de la tabla de simbolos
+#define DT_RELA         7   // Direccion de las entradas de reubicacion con añadido
+#define DT_RELASZ       8   // Tamaño total de las entradas de reubicacion con añadido
+#define DT_RELAENT      9   // Tamaño de una entrada de reubicacion con añadido
+#define DT_STRSZ        10  // Tamaño de la tabla de cadenas
+#define DT_SYMENT       11  // Tamaño de una entrada en la tabla de simbolos
+#define DT_INIT         12  // Direccion de la funcion de inicializacion
+#define DT_FINI         13  // Direccion de la funcion de finalizacion
+#define DT_SONAME       14  // Nombre del objeto compartido
+#define DT_RPATH        15  // Ruta de búsqueda de bibliotecas (obsoleto)
+#define DT_SYMBOLIC     16  // Indica que las búsquedas de simbolos deben comenzar en este objeto
+#define DT_REL          17  // Direccion de las entradas de reubicacion sin añadido
+#define DT_RELSZ        18  // Tamaño total de las entradas de reubicacion sin añadido
+#define DT_RELENT       19  // Tamaño de una entrada de reubicacion sin añadido
+#define DT_PLTREL       20  // Tipo de reubicacion utilizada en el PLT
+#define DT_DEBUG        21  // Reservado para depuracion
+#define DT_TEXTREL      22  // Indica que existen reubicaciones en la seccion de texto
+#define DT_JMPREL       23  // Direccion de las entradas de reubicacion del PLT
+#define DT_BIND_NOW     24  // Indica que todas las reubicaciones deben resolverse al inicio
+#define DT_INIT_ARRAY   25  // Direccion de la matriz de funciones de inicializacion
+#define DT_FINI_ARRAY   26  // Direccion de la matriz de funciones de finalizacion
+#define DT_INIT_ARRAYSZ 27  // Tamaño de la matriz de funciones de inicializacion
+#define DT_FINI_ARRAYSZ 28  // Tamaño de la matriz de funciones de finalizacion
+#define DT_RUNPATH      29  // Ruta de búsqueda de bibliotecas
+#define DT_FLAGS        30  // Banderas
+#define DT_ENCODING     32  // Valores codificados
+#define DT_PREINIT_ARRAY    32  // Direccion de la matriz de funciones de preinicializacion
+#define DT_PREINIT_ARRAYSZ  33  // Tamaño de la matriz de funciones de preinicializacion
+#define DT_NUM          34  // Número de entradas definidas
+
+
 /**
- * Seccion dinamica
+ * Seccion dinamica (.dynamic)
  */
 typedef struct Elf64_Dyn {
     Elf64_Word d_tag;
@@ -652,18 +755,38 @@ typedef struct Elf64_Dyn {
     } d_un;
 } Elf64_Dyn;
 
-bool elf_check_file(Elf32_Header *hdr);
+typedef struct {
+    Elf32_Sword d_tag;     // Tipo de entrada (por ejemplo, DT_NEEDED, DT_STRTAB, etc.)
+    union {
+        Elf32_Word d_val;  // Valor entero (si aplica)
+        Elf32_Addr d_ptr;  // Direccion o puntero (si aplica)
+    } d_un;
+} Elf32_Dyn;
 
+
+bool elf_check_file(Elf32_Header *hdr);
+const char *rel_type_x86(uint32_t type);
+const char *rel_type_x64(uint32_t type);
+void print_relocations(void *mem, int is64);
+void print_needed_libs(void *mem, int is64);
+void print_strings(void *mem, int is64);
+void print_symbols(void *mem, int is64);
+void *elf_lookup_symbol(const char *name);
+
+int elf32_get_symval(Elf32_Header *hdr, int table, size_t idx);
+void *elf32_load_file(void *file);
 void *elf32_load_segment_to_memory(void *mem, Elf64_Phdr *phdr, int elf_fd);
+bool elf32_check_supported(Elf32_Header *hdr);
 int elf32_do_reloc(Elf32_Header *hdr, Elf32_Rel *rel, Elf32_Shdr *reltab);
 int elf32_load_stage2(Elf32_Header *hdr);
 int elf32_load_stage1(Elf32_Header *hdr);
 
+
 /**
- * El siguiente paso para cargar un objeto ELF es comprobar que el archivo en cuestión
- * esté diseñado para ejecutarse en la máquina que lo cargó. De nuevo, el encabezado
- * ELF proporciona la información necesaria sobre el destino del archivo. El código
- * anterior asume que se ha implementado una función llamada elf_check_file()
+ * El siguiente paso para cargar un objeto ELF es comprobar que el archivo en cuestion
+ * esté diseñado para ejecutarse en la máquina que lo cargo. De nuevo, el encabezado
+ * ELF proporciona la informacion necesaria sobre el destino del archivo. El codigo
+ * anterior asume que se ha implementado una funcion llamada elf_check_file()
  * (o se ha utilizado la proporcionada anteriormente) y que la máquina
  * local es i386, little-endian y de 32 bits. Además, solo permite cargar
  * archivos ejecutables y reubicables, aunque esto se puede modificar
@@ -690,21 +813,68 @@ static inline void *elf32_load_rel(Elf32_Header *hdr) {
 
 
 
-void *elf32_load_file(void *file) {
-    Elf32_Header *hdr = (Elf32_Header *)file;
-    if(!elf_check_supported(hdr)) {
-        ERROR_ELF("ELF File cannot be loaded.\n");
-        return;
-    }
-    switch(hdr->e_type) {
-        case ET_EXEC:
-            // TODO : Implement
-            return NULL;
-        case ET_REL:
-            return elf_load_rel(hdr);
-    }
-    return NULL;
-}
 
+
+
+static inline const char *get_section_name(void *hdr, int shstrndx, int sh_name, int is64) {
+    if (is64) {
+        Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)hdr + ((Elf64_Header *)hdr)->e_shoff);
+        Elf64_Shdr *strtab = &shdr[shstrndx];
+        return (const char *)hdr + strtab->sh_offset + sh_name;
+    } else {
+        Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)hdr + ((Elf32_Header *)hdr)->e_shoff);
+        Elf32_Shdr *strtab = &shdr[shstrndx];
+        return (const char *)hdr + strtab->sh_offset + sh_name;
+    }
+}
+typedef enum {
+    ELFCLASS_UNKNOWN,
+    ELFCLASS_32,
+    ELFCLASS_64
+} ElfClass;
+
+typedef struct {
+    void *mem;
+    size_t size;
+    ElfClass elf_class;
+    union {
+        Elf32_Header *ehdr32;
+        Elf64_Header *ehdr64;
+    };
+} ElfFile;
+
+
+// --- Carga y validacion ---
+bool elf_mem_parse(ElfFile *elf, void *mem, size_t size);
+
+// --- Extraccion de datos ---
+size_t elf_section_count(const ElfFile *elf);
+const char *elf_section_name(const ElfFile *elf, size_t idx);
+uint32_t elf_section_type(const ElfFile *elf, size_t idx);
+uint64_t elf_section_addr(const ElfFile *elf, size_t idx);
+uint64_t elf_section_offset(const ElfFile *elf, size_t idx);
+uint64_t elf_section_size(const ElfFile *elf, size_t idx);
+
+// Simbolos
+size_t elf_symbol_count(const ElfFile *elf, size_t *symtab_idx);
+const char *elf_symbol_name(const ElfFile *elf, size_t symtab_idx, size_t sym_idx);
+uint64_t elf_symbol_value(const ElfFile *elf, size_t symtab_idx, size_t sym_idx);
+uint8_t elf_symbol_info(const ElfFile *elf, size_t symtab_idx, size_t sym_idx);
+
+// Relocaciones
+size_t elf_relocation_count(const ElfFile *elf, size_t rel_idx);
+void elf_get_relocation(const ElfFile *elf, size_t rel_idx, size_t rel_ent,
+                            uint64_t *offset, uint32_t *type, int *sym_idx);
+
+// Librerias requeridas
+size_t elf_needed_count(const ElfFile *elf);
+const char *elf_needed_name(const ElfFile *elf, size_t idx);
+
+// Strings de tablas de cadenas
+void elf_iterate_strings(const ElfFile *elf, void (*cb)(const char *str, void *user), void *user);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

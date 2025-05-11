@@ -15,7 +15,7 @@ typedef struct {
     int numberOfSections;
 } PE64FILE_struct;
 
-// Estructura para representar una librería y sus funciones a importar
+// Estructura para representar una libreria y sus funciones a importar
 typedef struct {
     const char* dllName;      // Ej: "KERNEL32.dll"
     const char** functions;   // Ej: { "ExitProcess", "WriteConsoleA" }
@@ -28,7 +28,7 @@ typedef struct {
     const char* name;
 } FunctionOffset;
 
-// Prototipos de funciones auxiliares y de extensión
+// Prototipos de funciones auxiliares y de extension
 void initializePE64File(PE64FILE_struct* pe);
 int addSection(PE64FILE_struct* pe, const char* name, _DWORD characteristics, _BYTE* data, _DWORD dataSize);
 int getSectionIndex(PE64FILE_struct* pe, const char* name);

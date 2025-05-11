@@ -151,7 +151,7 @@ void writePE64File(PE64FILE_struct* pe, const char* filename) {
     fwrite(padding, 1, headerPadding, fileHandle);
     free(padding);
 
-    // Escribir datos de cada sección
+    // Escribir datos de cada seccion
     for (int i = 0; i < pe->numberOfSections; i++) {
         fseek(fileHandle, pe->sectionHeaders[i].PointerToRawData, SEEK_SET);
         fwrite(pe->sectionData[i], 1, pe->sectionHeaders[i].SizeOfRawData, fileHandle);
@@ -175,32 +175,32 @@ int main() {
     initializePE64File(&pe);
     
     /*
-     * En este ejemplo se asume que la sección .text se carga en RVA = SECT_ALIGN (0x1000) 
-     y que la IAT se encuentra en la sección .idata en:
+     * En este ejemplo se asume que la seccion .text se carga en RVA = SECT_ALIGN (0x1000) 
+     y que la IAT se encuentra en la seccion .idata en:
      * 
      *  IAT = idataSectionRVA + importAddressTableRVA
-     *  RIP después de la instrucción call = SECT_ALIGN + (offset_call + tamaño_call)
+     *  RIP después de la instruccion call = SECT_ALIGN + (offset_call + tamaño_call)
      *  disp32 = IAT - (SECT_ALIGN + offset_call + tamaño_call)
      * 
-     * En este código el call empieza en offset 11 (0-indexado) y ocupa 6 bytes (por lo que el 
-     * RIP al terminar es SECT_ALIGN + 17). Así, el desplazamiento se calcula como:
+     * En este codigo el call empieza en offset 11 (0-indexado) y ocupa 6 bytes (por lo que el 
+     * RIP al terminar es SECT_ALIGN + 17). Asi, el desplazamiento se calcula como:
      * 
      *  disp32 = (idataSectionRVA + importAddressTableRVA) - (SECT_ALIGN + 17)
     */
 
-    // Sección .text: contiene código que realiza un call indirecto a ExitProcess
+    // Seccion .text: contiene codigo que realiza un call indirecto a ExitProcess
     _BYTE textSectionData[] = {
         0x48, 0x83, 0xEC, 0x28,                   // sub rsp, 40h
         0x48, 0xC7, 0xC1, 0x2A, 0x00, 0x00, 0x00,   // mov rcx, 42
         0xFF, 0x15, 0x00, 0x00, 0x00, 0x00,         // call [RIP+disp32] (disp32 a corregir)
         0xEB, 0xFE                                // jmp $
     };
-    // Agregar sección .text
+    // Agregar seccion .text
     addSection(&pe, ".text", IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ,
                textSectionData, sizeof(textSectionData));
 
-    // Preparación de la sección .idata
-    // Se asume que .idata será la segunda sección
+    // Preparacion de la seccion .idata
+    // Se asume que .idata será la segunda seccion
     _DWORD idataSectionRVA = SECT_ALIGN * 2;  // 0x2000
     _DWORD importLookupTableRVA = sizeof(IMAGE_IMPORT_DESCRIPTOR) * 2;  // Reservar espacio para descriptor + terminador
     _DWORD importAddressTableRVA = importLookupTableRVA + sizeof(_QWORD) * 2;
@@ -212,7 +212,7 @@ int main() {
 
     // Import Directory Table
     IMAGE_IMPORT_DESCRIPTOR importDescriptor = {0};
-    // Los campos se establecen como RVA absolutos (RVA de la sección + offset interno)
+    // Los campos se establecen como RVA absolutos (RVA de la seccion + offset interno)
     importDescriptor.OriginalFirstThunk = idataSectionRVA + importLookupTableRVA;
     importDescriptor.TimeDateStamp = 0;
     importDescriptor.ForwarderChain = 0;
@@ -251,21 +251,21 @@ int main() {
     strcpy((char*)idataSectionData + offset, "KERNEL32.dll");
     offset += strlen("KERNEL32.dll") + 1;
 
-    // Actualizar directorios de importación en el OptionalHeader
+    // Actualizar directorios de importacion en el OptionalHeader
     pe.ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress = idataSectionRVA;
     pe.ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size = sizeof(IMAGE_IMPORT_DESCRIPTOR) * 2;
     pe.ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IAT].VirtualAddress = idataSectionRVA + importAddressTableRVA;
     pe.ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IAT].Size = sizeof(_QWORD) * 2;    
 
-    // Agregar la sección .idata
+    // Agregar la seccion .idata
     addSection(&pe, ".idata", IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,
             idataSectionData, offset);
 
-    // Corregir el target del call en la sección .text:
-    // La instrucción call (FF 15) se encuentra a partir del offset 11;
+    // Corregir el target del call en la seccion .text:
+    // La instruccion call (FF 15) se encuentra a partir del offset 11;
     // los 4 bytes de desplazamiento están en offset 13.
-    // RIP después de la instrucción call = SECT_ALIGN + 17.
-    // IAT (donde se encuentra la dirección de ExitProcess) = idataSectionRVA + importAddressTableRVA.
+    // RIP después de la instruccion call = SECT_ALIGN + 17.
+    // IAT (donde se encuentra la direccion de ExitProcess) = idataSectionRVA + importAddressTableRVA.
     _DWORD textBase = SECT_ALIGN;                // 0x1000
     _DWORD callRIP = textBase + 17;                // RIP tras call (0x1000 + 17)
     _DWORD iatAddress = idataSectionRVA + importAddressTableRVA;  // Por ejemplo, 0x2000 + 56
@@ -274,7 +274,7 @@ int main() {
 
     // Establecer AddressOfEntryPoint
     pe.ntHeaders.OptionalHeader.AddressOfEntryPoint = SECT_ALIGN;
-    // Actualizar SizeOfImage en función de la última sección
+    // Actualizar SizeOfImage en funcion de la última seccion
     pe.ntHeaders.OptionalHeader.SizeOfImage = align(pe.sectionHeaders[pe.numberOfSections - 1].VirtualAddress + 
         pe.sectionHeaders[pe.numberOfSections - 1].Misc.VirtualSize,
         pe.ntHeaders.OptionalHeader.SectionAlignment);

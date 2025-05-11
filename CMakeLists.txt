@@ -94,3 +94,17 @@ add_executable(main
         src/LibPEparse.c
         src/UtilsC.c
         example/main.c)
+
+# example/elf1.c
+add_executable(elf1
+        include/CreatePe.h
+        include/LibCOFFparse.h
+        include/LibELFparse.h
+        include/LibPEparse.h
+        include/UtilsC.h
+        src/CreatePe.c
+        src/LibCOFFparse.c
+        src/LibELFparse.c
+        src/LibPEparse.c
+        src/UtilsC.c
+        example/elf1.c)

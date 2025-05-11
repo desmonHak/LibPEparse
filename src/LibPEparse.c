@@ -6,7 +6,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-// Nueva función para inicializar la estructura PE64FILE
+// Nueva funcion para inicializar la estructura PE64FILE
 void PE64FILE_Initialize(PE64FILE* peFile) {
     memset(peFile, 0, sizeof(PE64FILE)); // Inicializar todos los campos a 0
     peFile->PEFILE_RICH_HEADER_INFO.size = 0;
@@ -119,7 +119,7 @@ int locate64(PE64FILE* peFile, _DWORD VA) {
         if (VA >= sectionVA && VA < (sectionVA + sectionSize))
             return i;
     }
-    return -1;  // No se encontró la sección
+    return -1;  // No se encontro la seccion
 }
 _DWORD resolve64(PE64FILE* peFile, _DWORD VA, int index) {
     if (peFile == NULL) {
@@ -220,7 +220,7 @@ void ParseRichHeader64(PE64FILE* peFile) {
         return;
     }
 
-    // Buscar la cadena "Rich" en el buffer leído
+    // Buscar la cadena "Rich" en el buffer leido
     int index_ = -1;
     int searchLimit = peFile->PEFILE_DOS_HEADER_LFANEW - 4;
     if (searchLimit < 0) searchLimit = 0;
@@ -231,7 +231,7 @@ void ParseRichHeader64(PE64FILE* peFile) {
         }
     }
 
-    // Si no se encuentra el encabezado "Rich", salir de la función
+    // Si no se encuentra el encabezado "Rich", salir de la funcion
     if (index_ == -1) {
         printf("Encabezado 'Rich' no encontrado.\n");
         peFile->PEFILE_RICH_HEADER_INFO.entries = 0;
@@ -290,14 +290,14 @@ void ParseRichHeader64(PE64FILE* peFile) {
     }
 
 	int numEntries = (RichHeaderSize - 16) / 8;
-    if (numEntries <= 0 || numEntries > 10000) { // límite arbitrario de seguridad
+    if (numEntries <= 0 || numEntries > 10000) { // limite arbitrario de seguridad
         printf("Cantidad inválida de entradas Rich: %d\n", numEntries);
         free(RichHeaderPtr);
         free(dataPtr);
         return;
     }
 
-    // Almacenar la información del encabezado Rich en la estructura peFile
+    // Almacenar la informacion del encabezado Rich en la estructura peFile
     peFile->PEFILE_RICH_HEADER_INFO.size = RichHeaderSize;
     peFile->PEFILE_RICH_HEADER_INFO.ptrToBuffer = RichHeaderPtr;
     peFile->PEFILE_RICH_HEADER_INFO.entries = numEntries;
@@ -599,7 +599,7 @@ void ParseImportDirectory64(PE64FILE * peFile) {
         }
 
         if (tmp.Name == 0x00000000 && tmp.FirstThunk == 0x00000000) {
-            // Entrada nula encontrada, fin del directorio de importación
+            // Entrada nula encontrada, fin del directorio de importacion
             peFile->_import_directory_size = i * sizeof(___IMAGE_IMPORT_DESCRIPTOR);
             break;
         }
@@ -734,10 +734,10 @@ void ParseBaseReloc64(PE64FILE * peFile) {
         return;
     }
 
-    // Verificar si existe la sección de relocaciones:
+    // Verificar si existe la seccion de relocaciones:
     if (peFile->PEFILE_BASERELOC_DIRECTORY.VirtualAddress == 0 ||
         peFile->PEFILE_BASERELOC_DIRECTORY.Size == 0) {
-        printf("No se encontró la sección de reloc.\n");
+        printf("No se encontro la seccion de reloc.\n");
         peFile->_basreloc_directory_count = 0;
         peFile->PEFILE_BASERELOC_TABLE = NULL;
         return;
@@ -771,10 +771,10 @@ void ParseBaseReloc64(PE64FILE * peFile) {
         }
 
         peFile->_basreloc_directory_count++;
-        if (tmp.SizeOfBlock == 0) break; // Prevención de bucle infinito
+        if (tmp.SizeOfBlock == 0) break; // Prevencion de bucle infinito
         _basereloc_size_counter += tmp.SizeOfBlock;
 
-        // Prevención de desbordamiento
+        // Prevencion de desbordamiento
         if (_basereloc_size_counter > max_size) break;
     }
 
@@ -803,7 +803,7 @@ void ParseBaseReloc64(PE64FILE * peFile) {
             peFile->_basreloc_directory_count = i;
             break;
         }
-        if (peFile->PEFILE_BASERELOC_TABLE[i].SizeOfBlock == 0) break; // Prevención de bucle infinito
+        if (peFile->PEFILE_BASERELOC_TABLE[i].SizeOfBlock == 0) break; // Prevencion de bucle infinito
         _basereloc_size_counter += peFile->PEFILE_BASERELOC_TABLE[i].SizeOfBlock;
         if (_basereloc_size_counter > max_size) break;
     }
@@ -839,10 +839,10 @@ void PrintBaseRelocationsInfo64(PE64FILE *peFile) {
         _DWORD blockSize  = peFile->PEFILE_BASERELOC_TABLE[i].SizeOfBlock;
         int entries       = (blockSize - sizeof(___IMAGE_BASE_RELOCATION)) / sizeof(_WORD);
         
-        // Determinamos en qué sección se encuentra este bloque
+        // Determinamos en qué seccion se encuentra este bloque
         int sectionIndex = locate64(peFile, blockRVA);
         if (sectionIndex == -1) {
-            printf("  [Error] No se encontró sección para RVA 0x%X\n", blockRVA);
+            printf("  [Error] No se encontro seccion para RVA 0x%X\n", blockRVA);
             continue;
         }
         if (sectionIndex == -3) {
@@ -869,7 +869,7 @@ void PrintBaseRelocationsInfo64(PE64FILE *peFile) {
             
             fseek(peFile->Ppefile, curOffset, SEEK_SET);
             if (fread(&value, sizeof(_WORD), 1, peFile->Ppefile) != 1) {
-                printf("  [Error] Falló la lectura de la entrada %d del bloque %d\n", j, i);
+                printf("  [Error] Fallo la lectura de la entrada %d del bloque %d\n", j, i);
                 break;
             }
             // Extraemos el tipo (4 bits altos) y el offset (12 bits bajos)
