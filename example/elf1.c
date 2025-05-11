@@ -6,6 +6,8 @@ void print_f(const char *s, void *u) {
     printf("  %s\n", s);
 }
 
+
+
 void show_elf_info(const ElfFile *elf) {
     printf("ELF Class: %s\n", elf->elf_class==ELFCLASS_32 ? "ELF32" : "ELF64");
     printf("Secciones:\n");
@@ -16,6 +18,7 @@ void show_elf_info(const ElfFile *elf) {
             (unsigned long)elf_section_offset(elf, i),
             (unsigned long)elf_section_size(elf, i));
     }
+    show_elf_code_data_sections_auto(elf);
     size_t symtab_idx;
     size_t nsym = elf_symbol_count(elf, &symtab_idx);
     if (nsym) {
@@ -41,7 +44,7 @@ void show_elf_info(const ElfFile *elf) {
         }
     }
 
-    // Librerías requeridas
+    // Librerias requeridas
     printf("\nLibrerias requeridas:\n");
     size_t nlib = elf_needed_count(elf);
     for (size_t i=0; i<nlib; ++i)

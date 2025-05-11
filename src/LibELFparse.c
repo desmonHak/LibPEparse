@@ -15,6 +15,13 @@
 #include <string.h>
 #include <stdint.h>
 
+// Helper para imprimir bytes en hexadecimal
+static void print_hex(const uint8_t *data, size_t len) {
+    for (size_t i = 0; i < len; ++i)
+        printf("%02x", data[i]);
+    printf("\n");
+}
+
 // Definicion de una tabla global de simbolos
 typedef struct {
     const char *name;
@@ -41,6 +48,61 @@ void *elf_lookup_symbol(const char *name) {
     return NULL;
 }
 
+
+typedef struct {
+    uint64_t tag;
+    const char *name;
+} DynTagName;
+
+static const DynTagName dyn_tags[] = {
+    {0,        "DT_NULL"},
+    {1,        "DT_NEEDED"},
+    {2,        "DT_PLTRELSZ"},
+    {3,        "DT_PLTGOT"},
+    {4,        "DT_HASH"},
+    {5,        "DT_STRTAB"},
+    {6,        "DT_SYMTAB"},
+    {7,        "DT_RELA"},
+    {8,        "DT_RELASZ"},
+    {9,        "DT_RELAENT"},
+    {10,       "DT_STRSZ"},
+    {11,       "DT_SYMENT"},
+    {12,       "DT_INIT"},
+    {13,       "DT_FINI"},
+    {14,       "DT_SONAME"},
+    {15,       "DT_RPATH"},
+    {16,       "DT_SYMBOLIC"},
+    {17,       "DT_REL"},
+    {18,       "DT_RELSZ"},
+    {19,       "DT_RELENT"},
+    {20,       "DT_PLTREL"},
+    {21,       "DT_DEBUG"},
+    {22,       "DT_TEXTREL"},
+    {23,       "DT_JMPREL"},
+    {24,       "DT_BIND_NOW"},
+    {25,       "DT_INIT_ARRAY"},
+    {26,       "DT_FINI_ARRAY"},
+    {27,       "DT_INIT_ARRAYSZ"},
+    {28,       "DT_FINI_ARRAYSZ"},
+    {29,       "DT_RUNPATH"},
+    {30,       "DT_FLAGS"},
+    {32,       "DT_PREINIT_ARRAY"},
+    {33,       "DT_PREINIT_ARRAYSZ"},
+    {0x6ffffef5,"DT_GNU_HASH"},
+    {0x6ffffffb,"DT_FLAGS_1"},
+    {0x6ffffffe,"DT_VERNEED"},
+    {0x6fffffff,"DT_VERNEEDNUM"},
+    {0x6ffffff0,"DT_VERSYM"},
+    {0x6ffffff9,"DT_RELACOUNT"},
+    {0, NULL}
+};
+
+const char *dyn_tag_name(uint64_t tag) {
+    for (int i = 0; dyn_tags[i].name; ++i)
+        if (dyn_tags[i].tag == tag)
+            return dyn_tags[i].name;
+    return "UNKNOWN";
+}
 
 /**
  * Esta es la primera funcion que debe usarse al cargar un ELF. Comprueba que el ELF
@@ -739,14 +801,14 @@ void elf_iterate_strings(const ElfFile *elf, void (*cb)(const char *str, void *u
 }
 
 
-// --- Mostrar información de la cabecera ELF ---
+// --- Mostrar informacion de la cabecera ELF ---
 void show_elf_header(const ElfFile *elf) {
     if (elf->elf_class == ELFCLASS_32) {
         Elf32_Header *h = elf->ehdr32;
         printf("ELF Header:\n");
         printf("  Ident: ");
         for (int i = 0; i < 16; ++i) printf("%02x ", h->e_ident[i]);
-        printf("\n  Tipo: %u\n  Máquina: %u\n  Versión: %u\n", h->e_type, h->e_machine, h->e_version);
+        printf("\n  Tipo: %u\n  Máquina: %u\n  Version: %u\n", h->e_type, h->e_machine, h->e_version);
         printf("  Entry: 0x%08x\n", h->e_entry);
         printf("  PHoff: 0x%08x  SHoff: 0x%08x\n", h->e_phoff, h->e_shoff);
         printf("  Flags: 0x%08x\n", h->e_flags);
@@ -757,7 +819,7 @@ void show_elf_header(const ElfFile *elf) {
         printf("ELF Header:\n");
         printf("  Ident: ");
         for (int i = 0; i < 16; ++i) printf("%02x ", h->e_ident[i]);
-        printf("\n  Tipo: %u\n  Máquina: %u\n  Versión: %u\n", h->e_type, h->e_machine, h->e_version);
+        printf("\n  Tipo: %u\n  Máquina: %u\n  Version: %u\n", h->e_type, h->e_machine, h->e_version);
         printf("  Entry: 0x%016" PRIx64 "\n", (uint64_t)h->e_entry);
         printf("  PHoff: 0x%016" PRIx64 "  SHoff: 0x%016" PRIx64 "\n", (uint64_t)h->e_phoff, (uint64_t)h->e_shoff);
         printf("  Flags: 0x%08x\n", h->e_flags);
@@ -790,39 +852,195 @@ void show_elf_program_headers(const ElfFile *elf) {
 
 // --- Mostrar tabla dinámica (DT_*) ---
 void show_elf_dynamic(const ElfFile *elf) {
-    printf("\nDynamic Section:\n");
+    printf("\nDynamic Section (detallada):\n");
     size_t n = elf_section_count(elf);
     for (size_t i=0; i<n; ++i) {
         if (elf_section_type(elf, i) == SHT_DYNAMIC) {
+            // Busca la string table asociada
+            const char *strtab = NULL;
             if (elf->elf_class == ELFCLASS_32) {
                 Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+                for (size_t j=0; j<n; ++j)
+                    if (elf_section_type(elf, j) == SHT_STRTAB && strcmp(elf_section_name(elf, j), ".dynstr") == 0)
+                        strtab = (const char *)elf->mem + shdr[j].sh_offset;
                 Elf32_Dyn *dyn = (Elf32_Dyn *)((uint8_t *)elf->mem + shdr[i].sh_offset);
                 size_t nent = shdr[i].sh_size / sizeof(Elf32_Dyn);
-                for (size_t j=0; j<nent; ++j)
-                    printf("  Tag: 0x%08x  Val: 0x%08x\n", dyn[j].d_tag, dyn[j].d_un.d_val);
+                for (size_t j=0; j<nent; ++j) {
+                    uint32_t tag = dyn[j].d_tag;
+                    uint32_t val = dyn[j].d_un.d_val;
+                    const char *tagname = dyn_tag_name(tag);
+                    printf("  Tag: 0x%08x (%-14s)  Val: 0x%08x", tag, tagname, val);
+                    // Mostrar string asociado si corresponde
+                    if ((tag == 1 || tag == 14 || tag == 15 || tag == 29) && strtab && val)
+                        printf("  String: '%s'", strtab + val);
+                    printf("\n");
+                }
             } else {
                 Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+                for (size_t j=0; j<n; ++j)
+                    if (elf_section_type(elf, j) == SHT_STRTAB && strcmp(elf_section_name(elf, j), ".dynstr") == 0)
+                        strtab = (const char *)elf->mem + shdr[j].sh_offset;
                 Elf64_Dyn *dyn = (Elf64_Dyn *)((uint8_t *)elf->mem + shdr[i].sh_offset);
                 size_t nent = shdr[i].sh_size / sizeof(Elf64_Dyn);
-                for (size_t j=0; j<nent; ++j)
-                    printf("  Tag: 0x%016" PRIx64 "  Val: 0x%016" PRIx64 "\n", (uint64_t)dyn[j].d_tag, (uint64_t)dyn[j].d_un.d_val);
+                for (size_t j=0; j<nent; ++j) {
+                    uint64_t tag = dyn[j].d_tag;
+                    uint64_t val = dyn[j].d_un.d_val;
+                    const char *tagname = dyn_tag_name(tag);
+                    printf("  Tag: 0x%016" PRIx64 " (%-14s)  Val: 0x%016" PRIx64, tag, tagname, val);
+                    // Mostrar string asociado si corresponde
+                    if ((tag == 1 || tag == 14 || tag == 15 || tag == 29) && strtab && val)
+                        printf("  String: '%s'", strtab + val);
+                    printf("\n");
+                }
             }
         }
     }
 }
 
+
 // --- Mostrar notas (si existen) ---
+
+// Muestra todas las notas de todas las secciones SHT_NOTE
 void show_elf_notes(const ElfFile *elf) {
-    printf("\nNotes:\n");
-    size_t n = elf_section_count(elf);
-    for (size_t i=0; i<n; ++i) {
+    printf("\nNotes (detalladas):\n");
+    for (size_t i = 0; i < elf_section_count(elf); ++i) {
         if (elf_section_type(elf, i) == SHT_NOTE) {
-            printf("  Seccion %zu: %s\n", i, elf_section_name(elf, i));
-            // Leer y mostrar notas si quieres, aquí solo indicamos que existen
+            const char *secname = elf_section_name(elf, i);
+            uint64_t offset = elf_section_offset(elf, i);
+            uint64_t size   = elf_section_size(elf, i);
+            const uint8_t *data = (const uint8_t *)elf->mem + offset;
+            printf("  Seccion %zu: %s (offset 0x%lx, size 0x%lx)\n", i, secname, (unsigned long)offset, (unsigned long)size);
+
+            size_t pos = 0;
+            while (pos + 12 <= size) { // Cabecera de nota: 3 x 4 bytes (32 bits)
+                uint32_t namesz, descsz, type;
+                if (elf->elf_class == ELFCLASS_32) {
+                    namesz = *(uint32_t *)(data + pos);
+                    descsz = *(uint32_t *)(data + pos + 4);
+                    type   = *(uint32_t *)(data + pos + 8);
+                    pos += 12;
+                } else {
+                    namesz = *(uint32_t *)(data + pos);
+                    descsz = *(uint32_t *)(data + pos + 4);
+                    type   = *(uint32_t *)(data + pos + 8);
+                    pos += 12;
+                }
+                // El nombre del propietario
+                const char *name = (const char *)(data + pos);
+                printf("    Owner: '%.*s'  Type: 0x%x  NameSz: %u  DescSz: %u\n",
+                       namesz, name, type, namesz, descsz);
+                // Avanza a la descripcion (alineada a 4 bytes)
+                pos += ((namesz + 3) & ~3);
+                // La descripcion
+                const uint8_t *desc = data + pos;
+                if (strcmp(name, "GNU") == 0 && type == 3 && descsz >= 16) {
+                    // Build-ID
+                    printf("      GNU Build-ID: ");
+                    print_hex(desc, descsz);
+                } else if (strcmp(name, "GNU") == 0 && type == 1 && descsz >= 16) {
+                    // ABI tag
+                    if (descsz >= 16) {
+                        uint32_t os = *(uint32_t *)desc;
+                        uint32_t abi_major = *(uint32_t *)(desc + 4);
+                        uint32_t abi_minor = *(uint32_t *)(desc + 8);
+                        uint32_t abi_patch = *(uint32_t *)(desc + 12);
+                        printf("      GNU ABI: OS=%u, ABI=%u.%u.%u\n", os, abi_major, abi_minor, abi_patch);
+                    }
+                } else if (strcmp(name, "GNU") == 0 && type == 5) {
+                    // .note.gnu.property (puede contener propiedades de seguridad, etc.)
+                    printf("      GNU Property (hex): ");
+                    print_hex(desc, descsz);
+                } else {
+                    printf("      Desc (hex): ");
+                    print_hex(desc, descsz);
+                }
+                pos += ((descsz + 3) & ~3);
+            }
         }
     }
 }
 
+
+// Imprime un dump hexadecimal y ASCII de una seccion
+void print_section_dump(const uint8_t *data, size_t size, uint64_t addr) {
+    for (size_t i = 0; i < size; i += 16) {
+        printf("  %08lx: ", (unsigned long)(addr + i));
+        for (size_t j = 0; j < 16; ++j) {
+            if (i + j < size)
+                printf("%02x ", data[i + j]);
+            else
+                printf("   ");
+        }
+        printf(" ");
+        for (size_t j = 0; j < 16 && i + j < size; ++j) {
+            unsigned char c = data[i + j];
+            printf("%c", isprint(c) ? c : '.');
+        }
+        printf("\n");
+    }
+}
+
+// Muestra el contenido de las secciones de codigo y datos
+
+// Muestra el contenido de las secciones de codigo y datos
+void show_elf_code_data_sections(const ElfFile *elf) {
+    printf("\nContenido de secciones de codigo y datos:\n");
+    for (size_t i = 0; i < elf_section_count(elf); ++i) {
+        uint32_t type = elf_section_type(elf, i);
+        uint64_t size = elf_section_size(elf, i);
+        uint64_t offset = elf_section_offset(elf, i);
+        uint64_t addr = elf_section_addr(elf, i);
+        const char *name = elf_section_name(elf, i);
+
+        // Solo secciones con datos en el archivo (no SHT_NOBITS)
+        // y que sean tipicamente codigo o datos
+        if (type != SHT_NOBITS && size > 0 &&
+            (strcmp(name, ".text") == 0 ||
+             strcmp(name, ".data") == 0 ||
+             strcmp(name, ".rodata") == 0 ||
+             strcmp(name, ".init") == 0 ||
+             strcmp(name, ".fini") == 0 ||
+             strcmp(name, ".plt") == 0 ||
+             strcmp(name, ".got") == 0 ||
+             strcmp(name, ".got.plt") == 0)) {
+            printf("Seccion %zu: %s (offset 0x%lx, size 0x%lx, addr 0x%lx)\n",
+                   i, name, (unsigned long)offset, (unsigned long)size, (unsigned long)addr);
+            const uint8_t *data = (const uint8_t *)elf->mem + offset;
+            print_section_dump(data, size, addr);
+             }
+    }
+}
+
+
+void show_elf_code_data_sections_auto(const ElfFile *elf) {
+    printf("\nContenido de secciones de codigo y datos (auto):\n");
+    for (size_t i = 0; i < elf_section_count(elf); ++i) {
+        uint32_t type = elf_section_type(elf, i);
+        uint64_t size = elf_section_size(elf, i);
+        uint64_t offset = elf_section_offset(elf, i);
+        uint64_t addr = elf_section_addr(elf, i);
+        const char *name = elf_section_name(elf, i);
+
+        if (type != SHT_NOBITS && size > 0) {
+            uint64_t flags = 0;
+            if (elf->elf_class == ELFCLASS_32) {
+                Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
+                flags = shdr[i].sh_flags;
+            } else {
+                Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+                flags = shdr[i].sh_flags;
+            }
+            if (flags & SHF_ALLOC) { // Está en memoria
+                printf("Seccion %zu: %-16s (offset 0x%lx, size 0x%lx, addr 0x%lx, flags 0x%lx)%s%s\n",
+                       i, name, (unsigned long)offset, (unsigned long)size, (unsigned long)addr, (unsigned long)flags,
+                       (flags & SHF_EXECINSTR) ? " [CODE]" : "",
+                       (flags & SHF_WRITE) ? " [DATA]" : "");
+                const uint8_t *data = (const uint8_t *)elf->mem + offset;
+                print_section_dump(data, size, addr);
+            }
+        }
+    }
+}
 
 
 #endif

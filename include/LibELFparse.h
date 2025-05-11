@@ -333,10 +333,10 @@ enum ShT_Types {
  * pero son indicadores de bits en lugar de valores independientes.
  */
 enum ShT_Attributes {
-    SHF_WRITE	= 0x01, // Seccion de escritura
-    SHF_ALLOC	= 0x02  // Existe en memoria/reservar memoria para la seccion.
+    SHF_WRITE	  = 0x01, // Seccion de escritura
+    SHF_ALLOC	  = 0x02, // Existe en memoria/reservar memoria para la seccion.
+    SHF_EXECINSTR = 0x04  // (ejecutable)
 };
-
 /**
  *
  * @param hdr puntero a un ELF.
@@ -373,20 +373,20 @@ static inline Elf64_Shdr* elf64_sheader(Elf64_Header *hdr)
     return (Elf64_Shdr*) ((uintptr_t) hdr + hdr->e_shoff);
 }
 // posibles valores para e_shoff
-#define SHT_NULL            0x0  // Marca que la sección no está activa
-#define SHT_PROGBITS        0x1  // Sección que contiene información definida por el programa
-#define SHT_SYMTAB          0x2  // Sección de tabla de símbolos
-#define SHT_STRTAB          0x3  // Sección de tabla de cadenas
-#define SHT_RELA            0x4  // Sección de entradas de reubicación con añadidos
-#define SHT_HASH            0x5  // Sección de la tabla hash de símbolos
-#define SHT_DYNAMIC         0x6  // Sección para la vinculación dinámica
-#define SHT_NOTE            0x7  // Sección para información de marca del archivo
-#define SHT_NOBITS          0x8  // Sección que no ocupa espacio en el archivo
-#define SHT_REL             0x9  // Sección de entradas de reubicación sin añadidos
-#define SHT_DYNSYM          0xb  // Sección con un conjunto mínimo de símbolos para vinculación dinámica
-#define SHT_FINI_ARRAY      0xf  // Sección con una lista de punteros a funciones de terminación
-#define SHT_INIT_ARRAY      0xe  // Sección con una lista de punteros a funciones de inicialización
-#define SHT_PREINIT_ARRAY   0x10 // Sección con una lista de punteros a funciones de preinicialización
+#define SHT_NULL            0x0  // Marca que la seccion no está activa
+#define SHT_PROGBITS        0x1  // Seccion que contiene informacion definida por el programa
+#define SHT_SYMTAB          0x2  // Seccion de tabla de simbolos
+#define SHT_STRTAB          0x3  // Seccion de tabla de cadenas
+#define SHT_RELA            0x4  // Seccion de entradas de reubicacion con añadidos
+#define SHT_HASH            0x5  // Seccion de la tabla hash de simbolos
+#define SHT_DYNAMIC         0x6  // Seccion para la vinculacion dinámica
+#define SHT_NOTE            0x7  // Seccion para informacion de marca del archivo
+#define SHT_NOBITS          0x8  // Seccion que no ocupa espacio en el archivo
+#define SHT_REL             0x9  // Seccion de entradas de reubicacion sin añadidos
+#define SHT_DYNSYM          0xb  // Seccion con un conjunto minimo de simbolos para vinculacion dinámica
+#define SHT_FINI_ARRAY      0xf  // Seccion con una lista de punteros a funciones de terminacion
+#define SHT_INIT_ARRAY      0xe  // Seccion con una lista de punteros a funciones de inicializacion
+#define SHT_PREINIT_ARRAY   0x10 // Seccion con una lista de punteros a funciones de preinicializacion
 
 
 
@@ -858,8 +858,9 @@ typedef struct {
         Elf64_Header *ehdr64;
     };
 } ElfFile;
-
-
+void show_elf_code_data_sections_auto(const ElfFile *elf);
+void show_elf_dynamic(const ElfFile *elf);
+void show_elf_notes(const ElfFile *elf);
 // --- Carga y validacion ---
 bool elf_mem_parse(ElfFile *elf, void *mem, size_t size);
 
@@ -889,7 +890,7 @@ const char *elf_needed_name(const ElfFile *elf, size_t idx);
 // Strings de tablas de cadenas
 void elf_iterate_strings(const ElfFile *elf, void (*cb)(const char *str, void *user), void *user);
 
-// --- Mostrar información extendida de símbolos ---
+// --- Mostrar informacion extendida de simbolos ---
 static inline const char *sym_type_str(uint8_t info) {
     switch (info & 0xf) {
         case 0: return "NOTYPE";
