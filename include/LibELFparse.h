@@ -824,7 +824,7 @@ static inline void *elf32_load_rel(Elf32_Header *hdr) {
         return NULL;
     }
     // TODO : Parse the program header (if present)
-    return (void *)hdr->e_entry;
+    return (void *)(hdr->e_entry);
 }
 
 
@@ -877,7 +877,7 @@ size_t elf_symbol_count(const ElfFile *elf, size_t *symtab_idx);
 const char *elf_symbol_name(const ElfFile *elf, size_t symtab_idx, size_t sym_idx);
 uint64_t elf_symbol_value(const ElfFile *elf, size_t symtab_idx, size_t sym_idx);
 uint8_t elf_symbol_info(const ElfFile *elf, size_t symtab_idx, size_t sym_idx);
-
+void show_elf_info(const ElfFile *elf);
 // Relocaciones
 size_t elf_relocation_count(const ElfFile *elf, size_t rel_idx);
 void elf_get_relocation(const ElfFile *elf, size_t rel_idx, size_t rel_ent,

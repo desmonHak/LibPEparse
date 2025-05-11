@@ -16,7 +16,8 @@ add_executable(code1
         src/LibPEparse.c
         src/LibELFparse.c
         src/UtilsC.c
-        example/code1.c)
+        example/code1.c
+        example/elf2.c)
 
 # example/code2.c
 add_executable(code2
@@ -108,3 +109,17 @@ add_executable(elf1
         src/LibPEparse.c
         src/UtilsC.c
         example/elf1.c)
+add_executable(elf2
+        include/CreatePe.h
+        include/LibCOFFparse.h
+        include/LibELFparse.h
+        include/LibPEparse.h
+        include/UtilsC.h
+        include/CreateELF.h
+        src/CreatePe.c
+        src/LibCOFFparse.c
+        src/LibELFparse.c
+        src/LibPEparse.c
+        src/UtilsC.c
+        src/CreateELF.c
+        example/elf2.c)
