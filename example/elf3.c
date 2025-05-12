@@ -117,7 +117,7 @@ int main() {
 
     printf("ELF ejecutable generado: salida_printf.elf (%zu bytes)\n", b->size);
     printf("Para hacerlo ejecutable: chmod +x salida_printf.elf\n");
-    printf("Si al ejecutar ves 'Hola mundo', ¡funcionó!\n");
+    printf("Si al ejecutar ves 'Hola mundo', funciono\n");
 
     elf_builder_free(b);
     return 0;

@@ -3,6 +3,8 @@ project(LibPEparse C)
 
 set(CMAKE_C_STANDARD 11)
 
+
+
 include_directories(include)
 
 # example/code1.c
@@ -17,7 +19,8 @@ add_executable(code1
         src/LibELFparse.c
         src/UtilsC.c
         example/code1.c
-        example/elf2.c)
+        example/elf2.c
+        example/elf3.c)
 
 # example/code2.c
 add_executable(code2
@@ -80,7 +83,9 @@ if (MSVC)
     add_compile_options(/W4)
 else()
     # additional warnings
-    add_compile_options(-Wall -Wextra -Wpedantic -ggdb)
+    add_compile_options(
+            -Wall -Wextra -Wpedantic -g -O0
+    )
 endif()
 # example/main.c
 add_executable(main
@@ -123,3 +128,17 @@ add_executable(elf2
         src/UtilsC.c
         src/CreateELF.c
         example/elf2.c)
+add_executable(elf3
+        include/CreatePe.h
+        include/LibCOFFparse.h
+        include/LibELFparse.h
+        include/LibPEparse.h
+        include/UtilsC.h
+        include/CreateELF.h
+        src/CreatePe.c
+        src/LibCOFFparse.c
+        src/LibELFparse.c
+        src/LibPEparse.c
+        src/UtilsC.c
+        src/CreateELF.c
+        example/elf3.c)
