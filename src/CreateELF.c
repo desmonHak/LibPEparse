@@ -198,6 +198,74 @@ void elf_builder_finalize_exec64(ElfBuilder *b, uint64_t entry, size_t code_file
     phdr->p_align = PAGE_SIZE;
 }
 
+size_t elf_builder_add_section_ex(
+    ElfBuilder *b,
+    const char *name,
+    uint32_t type,
+    uint64_t flags,
+    const void *data,
+    size_t size,
+    uint64_t vaddr,
+    uint64_t align,
+    size_t *out_offset,
+    uint64_t *out_vaddr,
+    uint32_t sh_link,
+    uint32_t sh_info,
+    uint64_t sh_entsize
+) {
+    // Alineación de offset de archivo
+    size_t align_mask = align ? align - 1 : 0;
+    if (align && (b->size & align_mask)) {
+        b->size = (b->size + align_mask) & ~align_mask;
+    }
+    size_t file_off = b->size;
+
+    // Alineación de dirección virtual
+    uint64_t va = vaddr;
+    if (align && (va & align_mask)) {
+        va = (va + align_mask) & ~align_mask;
+    }
+
+    // Copia el nombre a shstrtab
+    size_t name_off = b->shstrtab_len;
+    size_t namelen = strlen(name) + 1;
+    if (b->shstrtab_len + namelen > b->shstrtab_cap) {
+        size_t new_cap = b->shstrtab_cap * 2;
+        char *new_strtab = realloc(b->shstrtab, new_cap);
+        if (!new_strtab) return 0;
+        b->shstrtab = new_strtab;
+        b->shstrtab_cap = new_cap;
+    }
+    memcpy(b->shstrtab + b->shstrtab_len, name, namelen);
+    b->shstrtab_len += namelen;
+
+    // Copia los datos de la sección
+    if (data && size) {
+        memcpy(b->mem + file_off, data, size);
+        b->size = file_off + size;
+    }
+
+    // Descriptor de sección
+    Elf64_Shdr *shdr = (Elf64_Shdr *)b->shdr;
+    Elf64_Shdr *s = &shdr[b->shnum];
+    memset(s, 0, sizeof(*s));
+    s->sh_link = sh_link;
+    s->sh_info = sh_info;
+    s->sh_entsize = sh_entsize;
+    s->sh_name = name_off;
+    s->sh_type = type;
+    s->sh_flags = flags;
+    s->sh_addr = va;
+    s->sh_offset = file_off;
+    s->sh_size = size;
+    s->sh_addralign = align ? align : 1;
+
+    if (out_offset) *out_offset = file_off;
+    if (out_vaddr)  *out_vaddr = va;
+    return b->shnum++;
+}
+
+
 void elf_builder_free(ElfBuilder *b) {
     if (b) {
         free(b->mem);

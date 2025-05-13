@@ -82,6 +82,22 @@ void elf_builder_finalize_exec64(
     size_t code_size
 );
 
+size_t elf_builder_add_section_ex(
+    ElfBuilder *b,
+    const char *name,
+    uint32_t type,
+    uint64_t flags,
+    const void *data,
+    size_t size,
+    uint64_t vaddr,
+    uint64_t align,
+    size_t *out_offset,
+    uint64_t *out_vaddr,
+    uint32_t sh_link,
+    uint32_t sh_info,
+    uint64_t sh_entsize
+);
+
 // Libera todos los recursos asociados con el ElfBuilder
 void elf_builder_free(ElfBuilder *b);
 #endif // CREATE_ELF_H
