@@ -84,6 +84,7 @@ void* reserve_memory(size_t size, int prot, int flags) {
  */
 int free_reserved_memory(void* addr, size_t size) {
 #if defined(_WIN32)
+    UNUSED(size); // en windows no se usara este arg
     return VirtualFree(addr, 0, MEM_RELEASE) ? 0 : -1;
 #else
     return munmap(addr, size);
@@ -108,7 +109,7 @@ int free_reserved_memory(void* addr, size_t size) {
  * @param offset Desplazamiento dentro del archivo desde donde comenzar el mapeo.
  * @return Puntero a la memoria mapeada, o `NULL` si falla.
  */
-void* map_segment(void* desired_addr, size_t size, int prot, int flags, int fd, off_t offset) {
+void* map_segment(void* desired_addr, size_t size, int prot, int flags, int fd, uint64_t offset) {
 #if defined(_WIN32)
     DWORD flProtect = 0;
     DWORD dwDesiredAccess = 0;

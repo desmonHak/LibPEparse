@@ -1,6 +1,15 @@
 #ifndef LIB_ELF_PARSE_H
 #define LIB_ELF_PARSE_H
 
+// para parametros que no se usaran bajo ciertas circustancias
+#ifndef UNUSED
+#define UNUSED(x) (void)(x)
+#endif
+
+// https://stevens.netmeister.org/631/elf.html
+// https://sourceware.org/git/?p=glibc.git;a=blob_plain;f=sysdeps/x86_64/dl-machine.h
+// RIP -> https://www.tortall.net/projects/yasm/manual/html/nasm-effaddr.html
+
 #define ERROR_ELF printf
 #define DEBUG printf
 
@@ -20,9 +29,66 @@
     #define PROT_EXEC   0x4  // Permite ejecucion
 #endif
 
-#define PF_X 0x1  // Ejecutable
-#define PF_W 0x2  // Escribible
-#define PF_R 0x4  // Legible
+// Segment flag bits.
+typedef enum flags_bit_segment_ELF {
+    PF_X        = 0x1,          // Execute
+    PF_W        = 0x2,          // Write
+    PF_R        = 0x4,          // Read
+    PF_MASKOS   = 0x0ff00000,   // Bits for operating system-specific semantics.
+    #define PF_MASKPROC 0xf0000000    // Bits for processor-specific semantics.
+} flags_bit_segment_ELF;
+ 
+
+// tipos de sermento.
+typedef enum type_segment_elf {
+    PT_NULL = 0,            // Unused segment.
+    PT_LOAD = 1,            // Loadable segment.
+    PT_DYNAMIC = 2,         // Dynamic linking information.
+    PT_INTERP = 3,          // Interpreter pathname.
+    PT_NOTE = 4,            // Auxiliary information.
+    PT_SHLIB = 5,           // Reserved.
+    PT_PHDR = 6,            // The program header table itself.
+    PT_TLS = 7,             // The thread-local storage template.
+    PT_LOOS = 0x60000000,   // Lowest operating system-specific pt entry type.
+    PT_HIOS = 0x6fffffff,   // Highest operating system-specific pt entry type.
+    PT_LOPROC = 0x70000000, // Lowest processor-specific program hdr entry type.
+    PT_HIPROC = 0x7fffffff, // Highest processor-specific program hdr entry type.
+    
+    // x86-64 program header types.
+    // These all contain stack unwind tables.
+    PT_GNU_EH_FRAME = 0x6474e550,
+    PT_SUNW_EH_FRAME = 0x6474e550,
+    PT_SUNW_UNWIND = 0x6464e550,
+    
+    PT_GNU_STACK = 0x6474e551,    // Indicates stack executability.
+    PT_GNU_RELRO = 0x6474e552,    // Read-only after relocation.
+    PT_GNU_PROPERTY = 0x6474e553, // .note.gnu.property notes sections.
+    
+    PT_OPENBSD_MUTABLE = 0x65a3dbe5,   // Like bss, but not immutable.
+    PT_OPENBSD_RANDOMIZE = 0x65a3dbe6, // Fill with random data.
+    PT_OPENBSD_WXNEEDED = 0x65a3dbe7,  // Program does W^X violations.
+    PT_OPENBSD_NOBTCFI = 0x65a3dbe8,   // Do not enforce branch target CFI.
+    PT_OPENBSD_SYSCALLS = 0x65a3dbe9,  // System call sites.
+    PT_OPENBSD_BOOTDATA = 0x65a41be6,  // Section for boot arguments.
+    
+    // ARM program header types.
+    PT_ARM_ARCHEXT = 0x70000000, // Platform architecture compatibility info
+    // These all contain stack unwind tables.
+    PT_ARM_EXIDX = 0x70000001,
+    PT_ARM_UNWIND = 0x70000001,
+    // MTE memory tag segment type
+    PT_AARCH64_MEMTAG_MTE = 0x70000002,
+    
+    // MIPS program header types.
+    PT_MIPS_REGINFO = 0x70000000,  // Register usage information.
+    PT_MIPS_RTPROC = 0x70000001,   // Runtime procedure table.
+    PT_MIPS_OPTIONS = 0x70000002,  // Options segment.
+    PT_MIPS_ABIFLAGS = 0x70000003, // Abiflags segment.
+    
+    // RISCV program header types.
+    PT_RISCV_ATTRIBUTES = 0x70000003,
+} type_segment_elf;
+
 
 
 
@@ -81,22 +147,40 @@ enum Elf_Ident {
     EI_NIDENT       = 16 // Size of e_ident[]
 };
 
-typedef enum {
-    ELFOSABI_NONE      = 0,   // No extensions or unspecified
-    ELFOSABI_HPUX      = 1,   // Hewlett-Packard HP-UX
-    ELFOSABI_NETBSD    = 2,   // NetBSD
-    ELFOSABI_LINUX     = 3,   // Linux
-    ELFOSABI_SOLARIS   = 6,   // Sun Solaris
-    ELFOSABI_AIX       = 7,   // AIX
-    ELFOSABI_IRIX      = 8,   // IRIX
-    ELFOSABI_FREEBSD   = 9,   // FreeBSD
-    ELFOSABI_TRU64     = 10,  // Compaq TRU64 UNIX
-    ELFOSABI_MODESTO   = 11,  // Novell Modesto
-    ELFOSABI_OPENBSD   = 12,  // Open BSD
-    ELFOSABI_OPENVMS   = 13,  // Open VMS
-    ELFOSABI_NSK       = 14   // Hewlett-Packard Non-Stop Kernel
-    // 64–255 reserved for architecture-specific values
-} ElfOSABI;
+
+// OS ABI identification.
+enum {
+  ELFOSABI_NONE = 0,           // UNIX System V ABI
+  ELFOSABI_SYSV = ELFOSABI_NONE,
+  ELFOSABI_HPUX = 1,           // HP-UX operating system
+  ELFOSABI_NETBSD = 2,         // NetBSD
+  ELFOSABI_GNU = 3,            // GNU/Linux
+  ELFOSABI_LINUX = 3,          // Historical alias for ELFOSABI_GNU.
+  ELFOSABI_HURD = 4,           // GNU/Hurd
+  ELFOSABI_SOLARIS = 6,        // Solaris
+  ELFOSABI_AIX = 7,            // AIX
+  ELFOSABI_IRIX = 8,           // IRIX
+  ELFOSABI_FREEBSD = 9,        // FreeBSD
+  ELFOSABI_TRU64 = 10,         // TRU64 UNIX
+  ELFOSABI_MODESTO = 11,       // Novell Modesto
+  ELFOSABI_OPENBSD = 12,       // OpenBSD
+  ELFOSABI_OPENVMS = 13,       // OpenVMS
+  ELFOSABI_NSK = 14,           // Hewlett-Packard Non-Stop Kernel
+  ELFOSABI_AROS = 15,          // AROS
+  ELFOSABI_FENIXOS = 16,       // FenixOS
+  ELFOSABI_CLOUDABI = 17,      // Nuxi CloudABI
+  ELFOSABI_CUDA = 51,          // NVIDIA CUDA architecture.
+  ELFOSABI_FIRST_ARCH = 64,    // First architecture-specific OS ABI
+  ELFOSABI_AMDGPU_HSA = 64,    // AMD HSA runtime
+  ELFOSABI_AMDGPU_PAL = 65,    // AMD PAL runtime
+  ELFOSABI_AMDGPU_MESA3D = 66, // AMD GCN GPUs (GFX6+) for MESA runtime
+  ELFOSABI_ARM = 97,           // ARM
+  ELFOSABI_ARM_FDPIC = 65,     // ARM FDPIC
+  ELFOSABI_C6000_ELFABI = 64,  // Bare-metal TMS320C6000
+  ELFOSABI_C6000_LINUX = 65,   // Linux TMS320C6000
+  ELFOSABI_STANDALONE = 255,   // Standalone (embedded) application
+  ELFOSABI_LAST_ARCH = 255     // Last Architecture-specific OS ABI
+};
 
 
 #define ELFMAG0	0x7F // e_ident[EI_MAG0]
@@ -125,92 +209,6 @@ enum Elf_Type {
     ET_EXEC		= 2  // Executable File
 };
 
-#define EM_NONE 0                  // No machine
-#define EM_M32 1                   // AT&T WE 32100
-#define EM_SPARC 2                 // SPARC
-#define EM_386 3                   // Intel 80386
-#define EM_68K 4                   // Motorola 68000
-#define EM_88K 5                   // Motorola 88000
-#define EM_RESERVED_6 6            // Reserved for future use (was EM_486)
-#define EM_860 7                   // Intel 80860
-#define EM_MIPS 8                  // MIPS I Architecture
-#define EM_S370 9                  // IBM System/370 Processor
-#define EM_MIPS_RS3_LE 10          // MIPS RS3000 Little-endian
-#define EM_RESERVED_11_14 11-14    // Reserved for future use
-#define EM_PARISC 15               // Hewlett-Packard PA-RISC
-#define EM_RESERVED_16 16          // Reserved for future use
-#define EM_VPP500 17               // Fujitsu VPP500
-#define EM_SPARC32PLUS 18          // Enhanced instruction set SPARC
-#define EM_960 19                  // Intel 80960
-#define EM_PPC 20                  // PowerPC
-#define EM_PPC64 21                // 64-bit PowerPC
-#define EM_S390 22                 // IBM System/390 Processor
-#define EM_RESERVED_23_35 23-35    // Reserved for future use
-#define EM_V800 36                 // NEC V800
-#define EM_FR20 37                 // Fujitsu FR20
-#define EM_RH32 38                 // TRW RH-32
-#define EM_RCE 39                  // Motorola RCE
-#define EM_ARM 40                  // Advanced RISC Machines ARM
-#define EM_ALPHA 41                // Digital Alpha
-#define EM_SH 42                   // Hitachi SH
-#define EM_SPARCV9 43              // SPARC Version 9
-#define EM_TRICORE 44              // Siemens TriCore embedded processor
-#define EM_ARC 45                  // Argonaut RISC Core, Argonaut Technologies Inc.
-#define EM_H8_300 46               // Hitachi H8/300
-#define EM_H8_300H 47              // Hitachi H8/300H
-#define EM_H8S 48                  // Hitachi H8S
-#define EM_H8_500 49               // Hitachi H8/500
-#define EM_IA_64 50                // Intel IA-64 processor architecture
-#define EM_MIPS_X 51               // Stanford MIPS-X
-#define EM_COLDFIRE 52             // Motorola ColdFire
-#define EM_68HC12 53               // Motorola M68HC12
-#define EM_MMA 54                  // Fujitsu MMA Multimedia Accelerator
-#define EM_PCP 55                  // Siemens PCP
-#define EM_NCPU 56                 // Sony nCPU embedded RISC processor
-#define EM_NDR1 57                 // Denso NDR1 microprocessor
-#define EM_STARCORE 58             // Motorola Star*Core processor
-#define EM_ME16 59                 // Toyota ME16 processor
-#define EM_ST100 60                // STMicroelectronics ST100 processor
-#define EM_TINYJ 61                // Advanced Logic Corp. TinyJ embedded processor family
-#define EM_X86_64 62               // AMD x86-64 architecture
-#define EM_PDSP 63                 // Sony DSP Processor
-#define EM_PDP10 64                // Digital Equipment Corp. PDP-10
-#define EM_PDP11 65                // Digital Equipment Corp. PDP-11
-#define EM_FX66 66                 // Siemens FX66 microcontroller
-#define EM_ST9PLUS 67              // STMicroelectronics ST9+ 8/16 bit microcontroller
-#define EM_ST7 68                  // STMicroelectronics ST7 8-bit microcontroller
-#define EM_68HC16 69               // Motorola MC68HC16 Microcontroller
-#define EM_68HC11 70               // Motorola MC68HC11 Microcontroller
-#define EM_68HC08 71               // Motorola MC68HC08 Microcontroller
-#define EM_68HC05 72               // Motorola MC68HC05 Microcontroller
-#define EM_SVX 73                  // Silicon Graphics SVx
-#define EM_ST19 74                 // STMicroelectronics ST19 8-bit microcontroller
-#define EM_VAX 75                  // Digital VAX
-#define EM_CRIS 76                 // Axis Communications 32-bit embedded processor
-#define EM_JAVELIN 77              // Infineon Technologies 32-bit embedded processor
-#define EM_FIREPATH 78             // Element 14 64-bit DSP Processor
-#define EM_ZSP 79                  // LSI Logic 16-bit DSP Processor
-#define EM_MMIX 80                 // Donald Knuth's educational 64-bit processor
-#define EM_HUANY 81                // Harvard University machine-independent object files
-#define EM_PRISM 82                // SiTera Prism
-#define EM_AVR 83                  // Atmel AVR 8-bit microcontroller
-#define EM_FR30 84                 // Fujitsu FR30
-#define EM_D10V 85                 // Mitsubishi D10V
-#define EM_D30V 86                 // Mitsubishi D30V
-#define EM_V850 87                 // NEC v850
-#define EM_M32R 88                 // Mitsubishi M32R
-#define EM_MN10300 89              // Matsushita MN10300
-#define EM_MN10200 90              // Matsushita MN10200
-#define EM_PJ 91                   // picoJava
-#define EM_OPENRISC 92             // OpenRISC 32-bit embedded processor
-#define EM_ARC_A5 93               // ARC Cores Tangent-A5
-#define EM_XTENSA 94               // Tensilica Xtensa Architecture
-#define EM_VIDEOCORE 95            // Alphamosaic VideoCore processor
-#define EM_TMM_GPP 96              // Thompson Multimedia General Purpose Processor
-#define EM_NS32K 97                // National Semiconductor 32000 series
-#define EM_TPC 98                  // Tenor Network TPC processor
-#define EM_SNP1K 99                // Trebia SNP 1000 processor
-#define EM_ST200 100               // STMicroelectronics (www.st.com) ST200 microcontroller
 
 #define EV_NONE     (0)
 #define EV_CURRENT	(1)  // ELF Current Version
@@ -365,7 +363,7 @@ static inline size_t Elf64_get_number_sections(Elf64_Header *hdr) {
  * @return se retorna un pùntero al inicio de las secciones
  */
 static inline Elf32_Shdr *elf32_sheader(Elf32_Header *hdr) {
-    return (Elf32_Shdr *)((int)hdr + hdr->e_shoff);
+    return (Elf32_Shdr *)((uintptr_t)hdr + hdr->e_shoff);
 }
 static inline Elf64_Shdr* elf64_sheader(Elf64_Header *hdr)
 {
@@ -523,20 +521,35 @@ typedef struct Elf64_Sym {
 #define ELF32_ST_INFO(bind, type) (((bind) << 4) + ((type) & 0x0F))
 #define ELF64_ST_INFO ELF32_ST_INFO
 
-// Vinculacion
-enum StT_Bindings {
-    STB_LOCAL		= 0, // Local scope
-    STB_GLOBAL		= 1, // Global scope
-    STB_WEAK		= 2  // Weak, (ie. __attribute__((weak)))
-};
+// Symbol bindings.
+typedef enum StT_Bindings {
+    STB_LOCAL = 0,  // Local symbol, not visible outside obj file containing def
+    STB_GLOBAL = 1, // Global symbol, visible to all object files being combined
+    STB_WEAK = 2,   // Weak symbol, like global but lower-precedence (ie. __attribute__((weak)))
+    STB_GNU_UNIQUE = 10,
+    STB_LOOS = 10,   // Lowest operating system-specific binding type
+    STB_HIOS = 12,   // Highest operating system-specific binding type
+    STB_LOPROC = 13, // Lowest processor-specific binding type
+    STB_HIPROC = 15  // Highest processor-specific binding type
+} StT_Bindings;
 
 // Tipo de simbolo
-enum StT_Types {
-    STT_NOTYPE,    // Tipo desconocido
-    STT_OBJECT,    // Variable
-    STT_FUNC,      // Funcion
-    STT_SECTION,   // Marca una seccion
-    STT_FILE,      // Nombre de archivo
+enum {
+  STT_NOTYPE = 0,     // Symbol's type is not specified
+  STT_OBJECT = 1,     // Symbol is a data object (variable, array, etc.)
+  STT_FUNC = 2,       // Symbol is executable code (function, etc.)
+  STT_SECTION = 3,    // Symbol refers to a section
+  STT_FILE = 4,       // Local, absolute symbol that refers to a file
+  STT_COMMON = 5,     // An uninitialized common block
+  STT_TLS = 6,        // Thread local data object
+  STT_GNU_IFUNC = 10, // GNU indirect function
+  STT_LOOS = 10,      // Lowest operating system-specific symbol type
+  STT_HIOS = 12,      // Highest operating system-specific symbol type
+  STT_LOPROC = 13,    // Lowest processor-specific symbol type
+  STT_HIPROC = 15,    // Highest processor-specific symbol type
+ 
+  // AMDGPU symbol types
+  STT_AMDGPU_HSA_KERNEL = 10
 };
 
 /**
@@ -614,6 +627,8 @@ typedef struct {
     Elf64_Sword r_addend;  // Valor constante adicional
 } Elf64_Rela;
 
+#include "RelocsELF/RelocsELF.h"
+
 
 /*
  * Las definiciones anteriores corresponden a los diferentes tipos de estructura
@@ -644,7 +659,7 @@ typedef struct {
 #define ELF64_R_TYPE(INFO)  ((INFO) & 0xFFFFFFFFL)
 
 
-#define ELF64_R_INFO(sym, ttype) (((uint64_t)(sym) << 32) + ((type) & 0xFFFFFFFFL))
+#define ELF64_R_INFO(sym, type) (((uint64_t)(sym) << 32) + ((type) & 0xFFFFFFFFL))
 #define ELF32_R_INFO(sym, type) (((sym) << 8) + (uint8_t)(type))
 
 
@@ -656,11 +671,12 @@ typedef struct {
  * y ELF32_R_TYPE() proporciona acceso al tipo de reubicacion. La enumeracion
  * RtT_Types define los tipos de reubicacion que abarcará este tutorial.
  */
-enum RtT_Types {
+// ahora en RelocsELF/i386.h
+/*enum RtT_Types {
     R_386_NONE		= 0, // No relocation
     R_386_32		= 1, // Symbol + Offset
     R_386_PC32		= 2  // Symbol + Offset - Section Offset
-};
+};*/
 
 /**
  * El encabezado del programa es una estructura que define informacion
@@ -713,7 +729,7 @@ typedef struct Elf64_Phdr {
 static inline Elf32_Phdr *elf32_getProgramHeaderTable(Elf32_Header *file)
 {
 	/* Cast hell! */
-	return (Elf32_Phdr*) (((int) file) + file->e_phoff);
+	return (Elf32_Phdr*) (((uintptr_t) file) + file->e_phoff);
 }
 
 static inline Elf64_Phdr *elf64_getProgramHeaderTable(Elf64_Header *file)
@@ -780,6 +796,7 @@ typedef struct {
 } Elf32_Dyn;
 
 
+
 bool elf_check_file(Elf32_Header *hdr);
 const char *rel_type_x86(uint32_t type);
 const char *rel_type_x64(uint32_t type);
@@ -791,7 +808,7 @@ void *elf_lookup_symbol(const char *name);
 
 int elf32_get_symval(Elf32_Header *hdr, int table, size_t idx);
 void *elf32_load_file(void *file);
-void *elf32_load_segment_to_memory(void *mem, Elf64_Phdr *phdr, int elf_fd);
+void *elf32_load_segment_to_memory(/*void *mem,*/ Elf64_Phdr *phdr, int elf_fd);
 bool elf32_check_supported(Elf32_Header *hdr);
 int elf32_do_reloc(Elf32_Header *hdr, Elf32_Rel *rel, Elf32_Shdr *reltab);
 int elf32_load_stage2(Elf32_Header *hdr);
@@ -824,7 +841,7 @@ static inline void *elf32_load_rel(Elf32_Header *hdr) {
         return NULL;
     }
     // TODO : Parse the program header (if present)
-    return (void *)(hdr->e_entry);
+    return ((void *)((uintptr_t)(hdr->e_entry)));
 }
 
 
@@ -860,7 +877,18 @@ typedef struct {
 } ElfFile;
 void show_elf_code_data_sections_auto(const ElfFile *elf);
 void show_elf_dynamic(const ElfFile *elf);
+
+// GNU note types.
+typedef enum type_notes_ELF {
+    NT_GNU_ABI_TAG = 1,
+    NT_GNU_HWCAP = 2,
+    NT_GNU_BUILD_ID = 3,
+    NT_GNU_GOLD_VERSION = 4,
+    NT_GNU_PROPERTY_TYPE_0 = 5,
+    #define FDO_PACKAGING_METADATA 0xcafe1a7e,
+} type_notes_ELF;
 void show_elf_notes(const ElfFile *elf);
+
 // --- Carga y validacion ---
 bool elf_mem_parse(ElfFile *elf, void *mem, size_t size);
 

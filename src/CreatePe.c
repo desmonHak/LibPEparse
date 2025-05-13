@@ -149,8 +149,7 @@ _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA,
     _BYTE* buffer = calloc(1, totalSize);
     if (!buffer) 
         return NULL;
-    _DWORD offset = 0;
-    
+
     // Reservamos áreas consecutivas:
     //  [0, sizeImportDir): Import Directory Table
     //  [sizeImportDir, sizeImportDir + sizeILT_IAT): ILT + IAT para todas las librerias

@@ -2,6 +2,10 @@
 #define CREATE_ELF_H
 #define PAGE_SIZE 0x1000
 
+// https://stevens.netmeister.org/631/elf.html
+// https://sourceware.org/git/?p=glibc.git;a=blob_plain;f=sysdeps/x86_64/dl-machine.h
+// RIP -> https://www.tortall.net/projects/yasm/manual/html/nasm-effaddr.html
+
 #include "LibELFparse.h"
 #ifndef EI_MAG0
 #define EI_MAG0         0
@@ -15,7 +19,7 @@
 #define EI_ABIVERSION   8
 #endif
 
-#define ELFOSABI_SYSV   0
+
 
 typedef struct {
     uint8_t *mem;        // Buffer principal para la imagen ELF
@@ -77,7 +81,7 @@ void elf_builder_finalize_exec64(
     uint64_t code_vaddr,
     size_t code_size
 );
-#define PT_LOAD         1
+
 // Libera todos los recursos asociados con el ElfBuilder
 void elf_builder_free(ElfBuilder *b);
 #endif // CREATE_ELF_H

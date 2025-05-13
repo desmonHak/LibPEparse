@@ -58,22 +58,22 @@ void PE64FILE_Destroy(PE64FILE* peFile) {
 
 void PE64FILE_PrintInfo64(PE64FILE* peFile) {
     if (peFile != NULL) {
-        printf("PrintDOSHeaderInfo64=%p\n", peFile);
+        printf("PrintDOSHeaderInfo64=%p\n", (void*)peFile);
         PrintDOSHeaderInfo64(peFile);
 
-        printf("PrintRichHeaderInfo64=%p\n", peFile);
+        printf("PrintRichHeaderInfo64=%p\n", (void*)peFile);
         PrintRichHeaderInfo64(peFile);
 
-        printf("PrintNTHeadersInfo64=%p\n", peFile);
+        printf("PrintNTHeadersInfo64=%p\n", (void*)peFile);
         PrintNTHeadersInfo64(peFile);
 
-        printf("PrintSectionHeadersInfo64=%p\n", peFile);
+        printf("PrintSectionHeadersInfo64=%p\n", (void*)peFile);
         PrintSectionHeadersInfo64(peFile);
 
-        printf("PrintImportTableInfo64=%p\n", peFile);
+        printf("PrintImportTableInfo64=%p\n", (void*)peFile);
         PrintImportTableInfo64(peFile);
 
-        printf("PrintBaseRelocationsInfo64=%p\n", peFile);
+        printf("PrintBaseRelocationsInfo64=%p\n", (void*)peFile);
         PrintBaseRelocationsInfo64(peFile);
     }
 }
@@ -185,7 +185,7 @@ void PrintDOSHeaderInfo64(PE64FILE* peFile) {
 	printf(" -----------\n\n");
 
 	printf(" Magic: 0x%X\n", peFile->PEFILE_DOS_HEADER_EMAGIC);
-	printf(" File address of new exe header: 0x%X\n", peFile->PEFILE_DOS_HEADER_LFANEW);
+	printf(" File address of new exe header: 0x%lX\n", peFile->PEFILE_DOS_HEADER_LFANEW);
 
 }
 
@@ -196,7 +196,7 @@ void ParseRichHeader64(PE64FILE* peFile) {
     }
     // Validar que el tamaño sea razonable
     if (peFile->PEFILE_DOS_HEADER_LFANEW < 0x40) {
-        printf("ParseRichHeader64 -> e_lfanew demasiado pequeño (%X), no es válido.\n", peFile->PEFILE_DOS_HEADER_LFANEW);
+        printf("ParseRichHeader64 -> e_lfanew demasiado pequeño (%lX), no es válido.\n", peFile->PEFILE_DOS_HEADER_LFANEW);
         return;
     }
     if (peFile->Ppefile == NULL) {
@@ -240,7 +240,7 @@ void ParseRichHeader64(PE64FILE* peFile) {
     }
 
     // Obtener la clave XOR ubicada después de la cadena "Rich"
-    if (index_ + 8 > peFile->PEFILE_DOS_HEADER_LFANEW) {
+    if ((uint32_t)index_ + 8 > peFile->PEFILE_DOS_HEADER_LFANEW) {
         printf("No hay suficiente espacio para la clave XOR.\n");
         free(dataPtr);
         return;
@@ -252,7 +252,7 @@ void ParseRichHeader64(PE64FILE* peFile) {
     int indexpointer = index_ - 4;
     int RichHeaderSize = 0;
     while (indexpointer >= 0) {
-        if (indexpointer + 4 > peFile->PEFILE_DOS_HEADER_LFANEW) {
+        if (((uint32_t)indexpointer) + 4 > (uint32_t)peFile->PEFILE_DOS_HEADER_LFANEW) {
             printf("Desbordamiento al buscar DanS.\n");
             free(dataPtr);
             return;
@@ -457,7 +457,7 @@ void PrintNTHeadersInfo64(PE64FILE* peFile) {
 	printf("   Size of uninitialized data: 0x%X\n", peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_UNINITIALIZED_DATA);
 	printf("   Address of entry point: 0x%X\n", peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_ADDRESS_OF_ENTRYPOINT);
 	printf("   RVA of start of code section: 0x%X\n", peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_BASE_OF_CODE);
-	printf("   Desired image base: 0x%X\n", peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_IMAGEBASE);
+	printf("   Desired image base: 0x%llX\n", peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_IMAGEBASE);
 	printf("   Section alignment: 0x%X\n", peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SECTION_ALIGNMENT);
 	printf("   File alignment: 0x%X\n", peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_FILE_ALIGNMENT);
 	printf("   Size of image: 0x%X\n", peFile->PEFILE_NT_HEADERS_OPTIONAL_HEADER_SIZEOF_IMAGE);
@@ -668,7 +668,7 @@ void PrintImportTableInfo64(PE64FILE * peFile) {
         if (peFile->PEFILE_IMPORT_TABLE[i].TimeDateStamp == 0) {
             printf("       Bound: FALSE\n");
         }
-        else if (peFile->PEFILE_IMPORT_TABLE[i].TimeDateStamp == -1) {
+        else if (peFile->PEFILE_IMPORT_TABLE[i].TimeDateStamp == (_DWORD)-1) {
             printf("       Bound: TRUE\n");
         }
 
@@ -758,7 +758,7 @@ void ParseBaseReloc64(PE64FILE * peFile) {
     int max_size = peFile->PEFILE_BASERELOC_DIRECTORY.Size;
 
     // Primer recorrido: contar bloques
-    for (int i = 0; i < MAX_BASE_RELOC_BLOCKS && _basereloc_size_counter + sizeof(___IMAGE_BASE_RELOCATION) <= max_size; i++) {
+    for (int i = 0; i < MAX_BASE_RELOC_BLOCKS && _basereloc_size_counter + (int)sizeof(___IMAGE_BASE_RELOCATION) <= max_size; i++) {
         ___IMAGE_BASE_RELOCATION tmp;
         int offset = _basereloc_directory_address + _basereloc_size_counter;
         fseek(peFile->Ppefile, offset, SEEK_SET);
@@ -892,19 +892,19 @@ _DWORD align(_DWORD size, _DWORD alignment) {
 void AddNewSection64(
     PE64FILE* peFile, 
     const char* newSectionName, _DWORD sizeOfRawData, 
-    const void* sectionData, int sectionType) {
+    /*const void* sectionData,*/ int sectionType) {
     if (peFile == NULL) {
         printf("AddNewSection64 -> peFile == NULL\n");
         return;
     }
-    if (peFile == NULL) {
+    if (newSectionName == NULL) {
         printf("AddNewSection64 -> newSectionName == NULL\n");
         return;
     }
-    if (peFile == NULL) {
+    /*if (sectionData == NULL) {
         printf("AddNewSection64 -> sectionData == NULL\n");
         return;
-    }
+    }*/
     if (sectionType <= 0) {
         printf("AddNewSection64 -> sectionType <= 0\n");
         return;
@@ -916,7 +916,7 @@ void AddNewSection64(
 
     // 1.  Calculate aligned sizes
     _DWORD alignedVirtualSize = align(sizeOfRawData, sectionAlignment);
-    _DWORD alignedSizeOfRawData = align(sizeOfRawData, fileAlignment);
+    //_DWORD alignedSizeOfRawData = align(sizeOfRawData, fileAlignment);
 
     // 2. Calculate the position of the new section
     _DWORD lastSectionEnd = peFile->PEFILE_NT_HEADERS.OptionalHeader.SizeOfHeaders;
@@ -1063,7 +1063,7 @@ void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sect
     }
 
     // 5. Copy Section Data
-    _DWORD lastSectionEnd = 0;
+    //_DWORD lastSectionEnd = 0;
     for (int i = 0; i < peFile->PEFILE_NT_HEADERS.FileHeader.NumberOfSections; i++) {
         ___IMAGE_SECTION_HEADER* sectionHeader = &peFile->PEFILE_SECTION_HEADERS[i];
         _DWORD rawDataSize = sectionHeader->SizeOfRawData;
@@ -1105,7 +1105,7 @@ void WriteModifiedPEFile64(PE64FILE* peFile, const char* newFileName, char* sect
             }
         }
 
-        lastSectionEnd = rawDataPtr + rawDataSize;
+        //lastSectionEnd = rawDataPtr + rawDataSize;
     }
 
     // Ensure the file size is a multiple of FileAlignment

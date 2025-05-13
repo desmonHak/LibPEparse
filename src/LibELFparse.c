@@ -15,32 +15,47 @@
 #include <string.h>
 #include <stdint.h>
 
-// Helper para imprimir bytes en hexadecimal
+/**
+ * Helper para imprimir bytes en hexadecimal
+ *
+ * @param data puntero a datos a imprimir
+ * @param len tamaño de los datos
+ */
 static void print_hex(const uint8_t *data, size_t len) {
     for (size_t i = 0; i < len; ++i)
         printf("%02x", data[i]);
     printf("\n");
 }
 
-// Definicion de una tabla global de simbolos
+/**
+ * Definicion de una tabla global de simbolos
+ */
 typedef struct {
     const char *name;
-    void *address;
+    void (*address)(void);  // tipo genérico de función
 } SymbolEntry;
 
+/**
+ * Tabla global de simbolos
+ */
 static SymbolEntry global_symbols[] = {
-     {"puts", (void*)puts},
-     {"printf", (void*)printf},
+     {"puts", (void (*)(void))puts},
+     {"printf", (void (*)(void))printf},
     // simbolos globales
     {NULL, NULL}
 };
 
+/**
+ *
+ * @param name Nombre del simbolo a buscar.
+ * @return Se retorna la direccion de la funcion/simbolo pasado por parametro
+ */
 void *elf_lookup_symbol(const char *name) {
     printf("elf_lookup_symbol -> %s ", name);
     for (int i = 0; global_symbols[i].name != NULL; ++i) {
         if (strcmp(global_symbols[i].name, name) == 0) {
-            printf("%p\n", global_symbols[i].address);
-            return global_symbols[i].address;
+            printf("%p\n", (void *)(uintptr_t)global_symbols[i].address);
+            return ((void *)(uintptr_t)global_symbols[i].address);
         }
     }
     printf("\n");
@@ -196,7 +211,7 @@ void *elf32_load_file(void *file) {
     Elf32_Header *hdr = (Elf32_Header *)file;
     if(!elf32_check_supported(hdr)) {
         ERROR_ELF("ELF File cannot be loaded.\n");
-        return;
+        return NULL;
     }
     switch(hdr->e_type) {
         case ET_EXEC:
@@ -262,12 +277,12 @@ int elf32_get_symval(Elf32_Header *hdr, int table, size_t idx) {
 
     uint32_t symtab_entries = symtab->sh_size / symtab->sh_entsize;
     if(idx >= symtab_entries) {
-        ERROR_ELF("Symbol Index out of Range (%d:%u).\n", table, idx);
+        ERROR_ELF("Symbol Index out of Range (%d:%llu).\n", table, idx);
         return ELF_RELOC_ERR;
     }
 
-    int symaddr = (int)hdr + symtab->sh_offset;
-    Elf32_Sym *symbol = &((Elf32_Sym *)symaddr)[idx];
+    int symaddr = (int)((uintptr_t)hdr + (uintptr_t)symtab->sh_offset);
+    Elf32_Sym *symbol = &(((Elf32_Sym *)(uintptr_t)symaddr)[idx]);;
     /* ------------------------------ (1) ------------------------------- */
 
     /* ------------------------------ (2) ------------------------------- */
@@ -288,7 +303,7 @@ int elf32_get_symval(Elf32_Header *hdr, int table, size_t idx) {
                 return ELF_RELOC_ERR;
             }
         } else {
-            return (int)target;
+            return (int)((uintptr_t)target);
         }
         /* ------------------------------ (2) ------------------------------- */
 
@@ -299,7 +314,7 @@ int elf32_get_symval(Elf32_Header *hdr, int table, size_t idx) {
     } else {
         // definicion de simbolo interno
         Elf32_Shdr *target = elf32_section(hdr, symbol->st_shndx);
-        return (int)hdr + symbol->st_value + target->sh_offset;
+        return (int)((uintptr_t)hdr + ((uintptr_t)symbol->st_value) + ((uintptr_t)target->sh_offset));
     }
     /* ------------------------------ (3) ------------------------------- */
 }
@@ -360,8 +375,8 @@ int elf32_load_stage1(Elf32_Header *hdr) {
                 memset(mem, 0, section->sh_size);
 
                 // Assign the memory offset to the section offset
-                section->sh_offset = (int)mem - (int)hdr;
-                DEBUG("Allocated memory for a section (%ld).\n", section->sh_size);
+                section->sh_offset = (Elf32_Off)((uintptr_t)mem - (uintptr_t)hdr);
+                DEBUG("Allocated memory for a section (%d).\n", section->sh_size);
             }
         }
     }
@@ -400,7 +415,7 @@ int elf32_load_stage2(Elf32_Header *hdr) {
         if(section->sh_type == SHT_REL) {
             // Process each entry in the table
             for(idx = 0; idx < section->sh_size / section->sh_entsize; idx++) {
-                Elf32_Rel *reltab = &((Elf32_Rel *)((int)hdr + section->sh_offset))[idx];
+                Elf32_Rel *reltab = &((Elf32_Rel *)((uintptr_t)hdr + (uintptr_t)section->sh_offset))[idx];
                 int result = elf32_do_reloc(hdr, reltab, section);
                 // On error, display a message and return
                 if(result == ELF_RELOC_ERR) {
@@ -460,8 +475,8 @@ int elf32_do_reloc(Elf32_Header *hdr, Elf32_Rel *rel, Elf32_Shdr *reltab) {
     /* ------------------------------ (1) ------------------------------- */
     Elf32_Shdr *target = elf32_section(hdr, reltab->sh_info);
 
-    int addr = (int)hdr + target->sh_offset;
-    int *ref = (int *)(addr + rel->r_offset);
+    int addr = (int)((uintptr_t)hdr + (uintptr_t)target->sh_offset);
+    int *ref = (int *)((uintptr_t)addr + (uintptr_t)rel->r_offset);
     /* ------------------------------ (1) ------------------------------- */
 
     /* ------------------------------ (2) ------------------------------- */
@@ -485,7 +500,7 @@ int elf32_do_reloc(Elf32_Header *hdr, Elf32_Rel *rel, Elf32_Shdr *reltab) {
             break;
         case R_386_PC32:
             // Symbol + Offset - Section Offset
-            *ref = DO_386_PC32(symval, *ref, (int)ref);
+            *ref = DO_386_PC32(symval, *ref, (int)((uintptr_t)ref));
             break;
         default:
             // Relocation type not supported, display error and return
@@ -517,7 +532,7 @@ int elf32_do_reloc(Elf32_Header *hdr, Elf32_Rel *rel, Elf32_Shdr *reltab) {
  *
  * @param mem es la ubicacion del encabezado ELF
  */
-void *elf32_load_segment_to_memory(void *mem, Elf64_Phdr *phdr, int elf_fd) {
+void *elf32_load_segment_to_memory(/*void *mem,*/ Elf64_Phdr *phdr, int elf_fd) {
     size_t mem_size = phdr->p_memsz;
     off_t mem_offset = phdr->p_offset;
     size_t file_size = phdr->p_filesz;
@@ -530,7 +545,7 @@ void *elf32_load_segment_to_memory(void *mem, Elf64_Phdr *phdr, int elf_fd) {
 
     off_t page_offset = (uint64_t)vaddr % PAGE_SIZE;
     void *aligned_vaddr = (void *)((uint64_t)vaddr - page_offset);
-    size_t aligned_size = mem_size + page_offset;
+    //size_t aligned_size = mem_size + page_offset;
 
     int flags = MAP_PRIVATE_ | MAP_ANONYMOUS_;
     map_segment(
@@ -546,7 +561,7 @@ void *elf32_load_segment_to_memory(void *mem, Elf64_Phdr *phdr, int elf_fd) {
     if (mem_size > file_size) {
         void *page_break = (void*)(((uint64_t)vaddr + mem_offset + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1));
 
-        memset((uint64_t)vaddr + file_size, 0, (uint64_t)page_break - (uint64_t)vaddr - file_size);
+        memset((void*)(((uintptr_t)vaddr) + file_size), 0, (uint64_t)page_break - (uint64_t)vaddr - file_size);
         if (mem_size > (uint64_t)page_break - (uint64_t)vaddr) {
             map_segment(
                 page_break,
@@ -845,7 +860,7 @@ void show_elf_program_headers(const ElfFile *elf) {
         for (int i = 0; i < h->e_phnum; ++i) {
             printf("  %2d: Type: 0x%x Offset: 0x%016" PRIx64 " Vaddr: 0x%016" PRIx64 " Paddr: 0x%016" PRIx64 " Filesz: 0x%016" PRIx64 " Memsz: 0x%016" PRIx64 " Flags: 0x%x Align: 0x%" PRIx64 "\n",
                 i, phdr[i].p_type, phdr[i].p_offset, phdr[i].p_vaddr, phdr[i].p_paddr,
-                phdr[i].p_filesz, phdr[i].p_memsz, phdr[i].p_flags, phdr[i].p_align);
+                (uint64_t)phdr[i].p_filesz, phdr[i].p_memsz, phdr[i].p_flags, phdr[i].p_align);
         }
     }
 }
@@ -898,59 +913,78 @@ void show_elf_dynamic(const ElfFile *elf) {
 }
 
 
-// --- Mostrar notas (si existen) ---
-
-// Muestra todas las notas de todas las secciones SHT_NOTE
-void show_elf_notes(const ElfFile *elf) {
+/**
+ * Muestra todas las notas de todas las secciones SHT_NOTE
+ *
+ * @param elf Puntero a un ELF
+ */
+void show_elf_notes(const ElfFile* elf)
+{
     printf("\nNotes (detalladas):\n");
-    for (size_t i = 0; i < elf_section_count(elf); ++i) {
-        if (elf_section_type(elf, i) == SHT_NOTE) {
-            const char *secname = elf_section_name(elf, i);
+    for (size_t i = 0; i < elf_section_count(elf); ++i)
+    {
+        if (elf_section_type(elf, i) == SHT_NOTE)
+        {
+            const char* secname = elf_section_name(elf, i);
             uint64_t offset = elf_section_offset(elf, i);
-            uint64_t size   = elf_section_size(elf, i);
-            const uint8_t *data = (const uint8_t *)elf->mem + offset;
-            printf("  Seccion %zu: %s (offset 0x%lx, size 0x%lx)\n", i, secname, (unsigned long)offset, (unsigned long)size);
+            uint64_t size = elf_section_size(elf, i);
+            const uint8_t* data = (const uint8_t*)elf->mem + offset;
+            printf("  Seccion %zu: %s (offset 0x%lx, size 0x%lx)\n", i, secname, (unsigned long)offset,
+                   (unsigned long)size);
 
             size_t pos = 0;
-            while (pos + 12 <= size) { // Cabecera de nota: 3 x 4 bytes (32 bits)
+            while (pos + 12 <= size)
+            {
+                // Cabecera de nota: 3 x 4 bytes (32 bits)
                 uint32_t namesz, descsz, type;
-                if (elf->elf_class == ELFCLASS_32) {
-                    namesz = *(uint32_t *)(data + pos);
-                    descsz = *(uint32_t *)(data + pos + 4);
-                    type   = *(uint32_t *)(data + pos + 8);
+                if (elf->elf_class == ELFCLASS_32)
+                {
+                    namesz = *(uint32_t*)(data + pos);
+                    descsz = *(uint32_t*)(data + pos + 4);
+                    type = *(uint32_t*)(data + pos + 8);
                     pos += 12;
-                } else {
-                    namesz = *(uint32_t *)(data + pos);
-                    descsz = *(uint32_t *)(data + pos + 4);
-                    type   = *(uint32_t *)(data + pos + 8);
+                }
+                else
+                {
+                    namesz = *(uint32_t*)(data + pos);
+                    descsz = *(uint32_t*)(data + pos + 4);
+                    type = *(uint32_t*)(data + pos + 8);
                     pos += 12;
                 }
                 // El nombre del propietario
-                const char *name = (const char *)(data + pos);
+                const char* name = (const char*)(data + pos);
                 printf("    Owner: '%.*s'  Type: 0x%x  NameSz: %u  DescSz: %u\n",
                        namesz, name, type, namesz, descsz);
                 // Avanza a la descripcion (alineada a 4 bytes)
                 pos += ((namesz + 3) & ~3);
                 // La descripcion
-                const uint8_t *desc = data + pos;
-                if (strcmp(name, "GNU") == 0 && type == 3 && descsz >= 16) {
+                const uint8_t* desc = data + pos;
+                if (strcmp(name, "GNU") == 0 && type == 3 && descsz >= 16)
+                {
                     // Build-ID
                     printf("      GNU Build-ID: ");
                     print_hex(desc, descsz);
-                } else if (strcmp(name, "GNU") == 0 && type == 1 && descsz >= 16) {
+                }
+                else if (strcmp(name, "GNU") == 0 && type == 1 && descsz >= 16)
+                {
                     // ABI tag
-                    if (descsz >= 16) {
-                        uint32_t os = *(uint32_t *)desc;
-                        uint32_t abi_major = *(uint32_t *)(desc + 4);
-                        uint32_t abi_minor = *(uint32_t *)(desc + 8);
-                        uint32_t abi_patch = *(uint32_t *)(desc + 12);
+                    if (descsz >= 16)
+                    {
+                        uint32_t os = *(uint32_t*)desc;
+                        uint32_t abi_major = *(uint32_t*)(desc + 4);
+                        uint32_t abi_minor = *(uint32_t*)(desc + 8);
+                        uint32_t abi_patch = *(uint32_t*)(desc + 12);
                         printf("      GNU ABI: OS=%u, ABI=%u.%u.%u\n", os, abi_major, abi_minor, abi_patch);
                     }
-                } else if (strcmp(name, "GNU") == 0 && type == 5) {
+                }
+                else if (strcmp(name, "GNU") == 0 && type == 5)
+                {
                     // .note.gnu.property (puede contener propiedades de seguridad, etc.)
                     printf("      GNU Property (hex): ");
                     print_hex(desc, descsz);
-                } else {
+                }
+                else
+                {
                     printf("      Desc (hex): ");
                     print_hex(desc, descsz);
                 }
@@ -983,99 +1017,120 @@ void print_section_dump(const uint8_t *data, size_t size, uint64_t addr) {
 // Muestra el contenido de las secciones de codigo y datos
 
 // Muestra el contenido de las secciones de codigo y datos
-void show_elf_code_data_sections(const ElfFile *elf) {
+void show_elf_code_data_sections(const ElfFile* elf)
+{
     printf("\nContenido de secciones de codigo y datos:\n");
-    for (size_t i = 0; i < elf_section_count(elf); ++i) {
+    for (size_t i = 0; i < elf_section_count(elf); ++i)
+    {
         uint32_t type = elf_section_type(elf, i);
         uint64_t size = elf_section_size(elf, i);
         uint64_t offset = elf_section_offset(elf, i);
         uint64_t addr = elf_section_addr(elf, i);
-        const char *name = elf_section_name(elf, i);
+        const char* name = elf_section_name(elf, i);
 
         // Solo secciones con datos en el archivo (no SHT_NOBITS)
         // y que sean tipicamente codigo o datos
         if (type != SHT_NOBITS && size > 0 &&
             (strcmp(name, ".text") == 0 ||
-             strcmp(name, ".data") == 0 ||
-             strcmp(name, ".rodata") == 0 ||
-             strcmp(name, ".init") == 0 ||
-             strcmp(name, ".fini") == 0 ||
-             strcmp(name, ".plt") == 0 ||
-             strcmp(name, ".got") == 0 ||
-             strcmp(name, ".got.plt") == 0)) {
+                strcmp(name, ".data") == 0 ||
+                strcmp(name, ".rodata") == 0 ||
+                strcmp(name, ".init") == 0 ||
+                strcmp(name, ".fini") == 0 ||
+                strcmp(name, ".plt") == 0 ||
+                strcmp(name, ".got") == 0 ||
+                strcmp(name, ".got.plt") == 0))
+        {
             printf("Seccion %zu: %s (offset 0x%lx, size 0x%lx, addr 0x%lx)\n",
                    i, name, (unsigned long)offset, (unsigned long)size, (unsigned long)addr);
-            const uint8_t *data = (const uint8_t *)elf->mem + offset;
+            const uint8_t* data = (const uint8_t*)elf->mem + offset;
             print_section_dump(data, size, addr);
-             }
+        }
     }
 }
 
 
-void show_elf_code_data_sections_auto(const ElfFile *elf) {
+void show_elf_code_data_sections_auto(const ElfFile* elf)
+{
     printf("\nContenido de secciones de codigo y datos (auto):\n");
-    for (size_t i = 0; i < elf_section_count(elf); ++i) {
+    for (size_t i = 0; i < elf_section_count(elf); ++i)
+    {
         uint32_t type = elf_section_type(elf, i);
         uint64_t size = elf_section_size(elf, i);
         uint64_t offset = elf_section_offset(elf, i);
         uint64_t addr = elf_section_addr(elf, i);
-        const char *name = elf_section_name(elf, i);
+        const char* name = elf_section_name(elf, i);
 
-        if (type != SHT_NOBITS && size > 0) {
+        if (type != SHT_NOBITS && size > 0)
+        {
             uint64_t flags = 0;
-            if (elf->elf_class == ELFCLASS_32) {
-                Elf32_Shdr *shdr = (Elf32_Shdr *)((uint8_t *)elf->mem + elf->ehdr32->e_shoff);
-                flags = shdr[i].sh_flags;
-            } else {
-                Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + elf->ehdr64->e_shoff);
+            if (elf->elf_class == ELFCLASS_32)
+            {
+                Elf32_Shdr* shdr = (Elf32_Shdr*)((uint8_t*)elf->mem + elf->ehdr32->e_shoff);
                 flags = shdr[i].sh_flags;
             }
-            if (flags & SHF_ALLOC) { // Está en memoria
+            else
+            {
+                Elf64_Shdr* shdr = (Elf64_Shdr*)((uint8_t*)elf->mem + elf->ehdr64->e_shoff);
+                flags = shdr[i].sh_flags;
+            }
+            if (flags & SHF_ALLOC)
+            {
+                // Está en memoria
                 printf("Seccion %zu: %-16s (offset 0x%lx, size 0x%lx, addr 0x%lx, flags 0x%lx)%s%s\n",
                        i, name, (unsigned long)offset, (unsigned long)size, (unsigned long)addr, (unsigned long)flags,
                        (flags & SHF_EXECINSTR) ? " [CODE]" : "",
                        (flags & SHF_WRITE) ? " [DATA]" : "");
-                const uint8_t *data = (const uint8_t *)elf->mem + offset;
+                const uint8_t* data = (const uint8_t*)elf->mem + offset;
                 print_section_dump(data, size, addr);
             }
         }
     }
 }
 
+static void print_f(const char* s, void* u)
+{
+    printf("  %s --> %p\n", s, u);
+}
+void show_elf_info(const ElfFile* elf)
+{
 
-void show_elf_info(const ElfFile *elf) {
-    void print_f(const char *s, void *u) {
-        printf("  %s\n", s);
-    }
-    printf("ELF Class: %s\n", elf->elf_class==ELFCLASS_32 ? "ELF32" : "ELF64");
+    printf("ELF Class: %s\n", elf->elf_class == ELFCLASS_32 ? "ELF32" : "ELF64");
     printf("Secciones:\n");
-    for (size_t i=0; i<elf_section_count(elf); ++i) {
+    for (size_t i = 0; i < elf_section_count(elf); ++i)
+    {
         printf("  %2zu: %-20s Tipo: %u Addr: 0x%lx Offset: 0x%lx Size: 0x%lx\n",
-            i, elf_section_name(elf, i), elf_section_type(elf, i),
-            (unsigned long)elf_section_addr(elf, i),
-            (unsigned long)elf_section_offset(elf, i),
-            (unsigned long)elf_section_size(elf, i));
+               i, elf_section_name(elf, i), elf_section_type(elf, i),
+               (unsigned long)elf_section_addr(elf, i),
+               (unsigned long)elf_section_offset(elf, i),
+               (unsigned long)elf_section_size(elf, i));
     }
     show_elf_code_data_sections_auto(elf);
     size_t symtab_idx;
     size_t nsym = elf_symbol_count(elf, &symtab_idx);
-    if (nsym) {
+    if (nsym)
+    {
         printf("\nSimbolos:\n");
-        for (size_t i=0; i<nsym; ++i) {
+        for (size_t i = 0; i < nsym; ++i)
+        {
             uint8_t info = elf_symbol_info(elf, symtab_idx, i);
             printf("  %3zu: %-30s 0x%lx Info: 0x%02x [%s|%s]\n",
-                i, elf_symbol_name(elf, symtab_idx, i),
-                (unsigned long)elf_symbol_value(elf, symtab_idx, i),
-                info, sym_type_str(info), sym_bind_str(info));
+                   i, elf_symbol_name(elf, symtab_idx, i),
+                   (unsigned long)elf_symbol_value(elf, symtab_idx, i),
+                   info, sym_type_str(info), sym_bind_str(info));
         }
     }
     // Relocaciones extendidas
     printf("\nRelocaciones:\n");
-    for (size_t i=0; i<elf_section_count(elf); ++i) {
-        if (elf_section_type(elf, i)==SHT_REL || elf_section_type(elf, i)==SHT_RELA) {
+    for (size_t i = 0; i < elf_section_count(elf); ++i)
+    {
+        if (elf_section_type(elf, i) == SHT_REL || elf_section_type(elf, i) == SHT_RELA)
+        {
             size_t nrel = elf_relocation_count(elf, i);
-            for (size_t j=0; j<nrel; ++j) {
-                uint64_t off; uint32_t type; int sym;
+            for (size_t j = 0; j < nrel; ++j)
+            {
+                uint64_t off;
+                uint32_t type;
+                int sym;
                 elf_get_relocation(elf, i, j, &off, &type, &sym);
                 printf("  Seccion %zu Rel %zu: Offset 0x%lx Type %u Sym %d\n", i, j, (unsigned long)off, type, sym);
             }
@@ -1085,7 +1140,7 @@ void show_elf_info(const ElfFile *elf) {
     // Librerias requeridas
     printf("\nLibrerias requeridas:\n");
     size_t nlib = elf_needed_count(elf);
-    for (size_t i=0; i<nlib; ++i)
+    for (size_t i = 0; i < nlib; ++i)
         printf("  %s\n", elf_needed_name(elf, i));
 
     printf("\nStrings de tablas de cadenas:\n");

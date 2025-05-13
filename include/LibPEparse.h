@@ -521,7 +521,7 @@ void AddNewSection64(
     PE64FILE* peFile, 
     const char* newSectionName, 
     _DWORD sizeOfRawData, 
-    const void* sectionData, 
+    /*const void* sectionData, */
     int sectionType
 );
 void WriteModifiedPEFile64(
