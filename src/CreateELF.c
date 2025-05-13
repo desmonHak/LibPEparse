@@ -36,10 +36,10 @@ ElfBuilder *elf_builder_create_exec64(size_t capacity) {
     b->ehdr = b->mem;
     b->size = sizeof(Elf64_Header);
     b->phdr = b->mem + b->size;
-    b->size += sizeof(Elf64_Phdr);
+    b->size += 4 * sizeof(Elf64_Phdr); // 4 secciones a reservar
 
     // Inicializar la tabla de secciones (temporalmente)
-    b->shdr = calloc(32, sizeof(Elf64_Shdr)); // Espacio para 32 secciones
+    b->shdr = calloc(16, sizeof(Elf64_Shdr)); // Espacio para 16 secciones
     if (!b->shdr) {
         free(b->shstrtab);
         free(b->mem);
@@ -48,8 +48,8 @@ ElfBuilder *elf_builder_create_exec64(size_t capacity) {
     }
 
     // Inicializar con una sección NULL (obligatoria)
-    b->shnum = 1;
-    b->phnum = 1;
+    b->shnum = 1; // sección NULL
+    b->phnum = 4;
     b->shstrndx = 0;
 
     return b;

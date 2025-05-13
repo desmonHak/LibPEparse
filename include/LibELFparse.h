@@ -279,7 +279,7 @@ typedef struct Elf64_Header {
     Elf64_Half e_shstrndx;  /* Índice de encabezado de sección de la
                              * tabla de cadenas para el encabezado de sección
                              * * nombres */
-} Elf64_Header;
+} Elf64_Header, Elf64_Ehdr;
 
 /**
  * El formato ELF define numerosos tipos de secciones y sus encabezados correspondientes.
