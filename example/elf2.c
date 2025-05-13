@@ -2,140 +2,142 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "CreateELF.h"
 #include "LibELFparse.h"
 
-uint8_t code[] = {
-    0x48, 0xbf, 0,0,0,0, 0,0,0,0, // movabs rdi, <str_addr>
-    0xe8, 0,0,0,0,                // call printf@plt (relativo)
-    0x31, 0xff,                   // xor edi, edi
-    0xb8, 0x3c, 0x00, 0x00, 0x00, // mov eax, 60
-    0x0f, 0x05                    // syscall
+// Pequeño programa de ejemplo en assembly x86-64
+// Este código es el mínimo ejecutable que hace exit(0)
+// xor %edi, %edi       ; Establece el código de retorno a 0
+// mov $60, %eax        ; Syscall número 60 (sys_exit)
+// syscall              ; Realiza la llamada al sistema
+uint8_t exit_program[] = {
+    // mov rax, 0x0a646c726f77
+    0x48, 0xb8, 0x77, 0x6f, 0x72, 0x6c, 0x64, 0x0a, 0x00, 0x00,
+    0x50,                           // push rax
+
+    // mov rax, 0x202c6f6c6c6548
+    0x48, 0xb8, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x2c, 0x20, 0x00,
+    0x50,                           // push rax
+
+    // mov rsi, rsp
+    0x48, 0x89, 0xe6,
+
+    // mov rdx, 13
+    0xba, 0x0d, 0x00, 0x00, 0x00,
+
+    // mov rdi, 1
+    0xbf, 0x01, 0x00, 0x00, 0x00,
+
+    // mov rax, 1
+    0xb8, 0x01, 0x00, 0x00, 0x00,
+
+    // syscall
+    0x0f, 0x05,
+
+    // xor edi, edi
+    0x31, 0xff,
+
+    // mov eax, 60
+    0xb8, 0x3c, 0x00, 0x00, 0x00,
+
+    // syscall
+    0x0f, 0x05
 };
 
-const char hello_str[] = "Hola mundo\n";
-const char interp_path[] = "/lib64/ld-linux-x86-64.so.2";
-
-#define PAGE_SIZE 0x1000
-#define ALIGN(x, a) (((x) + ((a)-1)) & ~((a)-1))
-
 int main() {
-    // Offsets y direcciones base
-    uint64_t base_vaddr = 0x400000;
-    size_t interp_off = 0x200;
-    size_t text_off = 0x1000;
-    size_t data_off = 0x2000;
-    size_t plt_off = 0x3000;
-    size_t gotplt_off = 0x4000;
-    size_t dynstr_off = 0x5000;
-    size_t dynsym_off = 0x6000;
-    size_t rela_plt_off = 0x7000;
-    size_t dynamic_off = 0x8000;
+    size_t code_size = sizeof(exit_program);
+    uint64_t code_vaddr = 0x400000;  // Dirección típica de inicio en x86-64
+    size_t code_file_off = 0x1000;   // Offset típico para código en ELF
 
-    // Crear ELF
-    size_t capacity = 0x10000;
+    // Crear un ElfBuilder con capacidad suficiente
+    size_t capacity = 16 * PAGE_SIZE; // 64KB debería ser suficiente
     ElfBuilder *b = elf_builder_create_exec64(capacity);
+    if (!b) {
+        fprintf(stderr, "No se pudo crear el ElfBuilder\n");
+        return 1;
+    }
 
-    // .interp
-    elf_builder_add_section(b, ".interp", SHT_PROGBITS, SHF_ALLOC,
-        interp_path, strlen(interp_path)+1, base_vaddr+interp_off, 1, NULL, NULL);
+    // Rellenar con ceros hasta el offset donde empieza el código
+    size_t current_size = b->size;
+    if (code_file_off > current_size) {
+        memset(b->mem + current_size, 0, code_file_off - current_size);
+        b->size = code_file_off;
+    }
 
-    // .text
-    if (text_off > b->size) memset(b->mem + b->size, 0, text_off - b->size), b->size = text_off;
+    // Añadir la sección .text con el código
     size_t text_section_off;
     uint64_t text_section_vaddr;
-    elf_builder_add_section(b, ".text", SHT_PROGBITS, SHF_ALLOC|SHF_EXECINSTR,
-        code, sizeof(code), base_vaddr+text_off, 16, &text_section_off, &text_section_vaddr);
+    elf_builder_add_section(b, ".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR,
+                            exit_program, code_size, code_vaddr, PAGE_SIZE,
+                            &text_section_off, &text_section_vaddr);
 
-    // .data
-    if (data_off > b->size) memset(b->mem + b->size, 0, data_off - b->size), b->size = data_off;
-    size_t data_section_off;
-    uint64_t data_section_vaddr;
-    elf_builder_add_section(b, ".data", SHT_PROGBITS, SHF_ALLOC|SHF_WRITE,
-        hello_str, sizeof(hello_str), base_vaddr+data_off, 8, &data_section_off, &data_section_vaddr);
+    // Finalizar el ELF ejecutable
+    elf_builder_finalize_exec64(b, text_section_vaddr, text_section_off, text_section_vaddr, code_size);
 
-    // .plt (solo una entrada para printf)
-    uint8_t plt[0x10] = {
-        0xff, 0x25, 0,0,0,0,             // jmpq *got+8(%rip)
-        0x68, 0,0,0,0,                   // pushq reloc_index (0)
-        0xe9, 0,0,0,0                    // jmp plt[0]
-    };
-    uint64_t gotplt_addr = base_vaddr + gotplt_off;
-    uint64_t plt_addr = base_vaddr + plt_off;
-    *(uint32_t*)&plt[2] = (uint32_t)(gotplt_addr + 8 - (plt_addr + 6));
-    *(uint32_t*)&plt[7] = 0; // reloc_index
-    *(uint32_t*)&plt[12] = (uint32_t)(plt_addr - (plt_addr + 16));
-    elf_builder_add_section(b, ".plt", SHT_PROGBITS, SHF_ALLOC|SHF_EXECINSTR,
-        plt, sizeof(plt), plt_addr, 16, NULL, NULL);
+    // Escribir a disco
+    FILE *f = fopen("salida_exec.elf", "wb");
+    if (!f) {
+        perror("Error al abrir el archivo de salida");
+        elf_builder_free(b);
+        return 1;
+    }
 
-    // .got.plt (solo para printf)
-    uint64_t gotplt[2] = {0};
-    elf_builder_add_section(b, ".got.plt", SHT_PROGBITS, SHF_ALLOC|SHF_WRITE,
-        gotplt, sizeof(gotplt), gotplt_addr, 8, NULL, NULL);
+    size_t written = fwrite(b->mem, 1, b->size, f);
+    if (written != b->size) {
+        perror("Error al escribir el archivo ELF");
+        fclose(f);
+        elf_builder_free(b);
+        return 1;
+    }
 
-    // .dynstr
-    char dynstr[16] = "\0printf\0";
-    elf_builder_add_section(b, ".dynstr", SHT_STRTAB, SHF_ALLOC,
-        dynstr, sizeof(dynstr), base_vaddr+dynstr_off, 1, NULL, NULL);
+    fclose(f);
+    printf("ELF ejecutable generado: salida_exec.elf (%zu bytes)\n", b->size);
 
-    // .dynsym
-    struct {
-        uint32_t st_name; uint8_t st_info, st_other; uint16_t st_shndx;
-        uint64_t st_value, st_size;
-    } dynsym[2] = {0};
-    dynsym[1].st_name = 1; // offset en dynstr
-    dynsym[1].st_info = 0x12; // GLOBAL FUNC
-    elf_builder_add_section(b, ".dynsym", SHT_DYNSYM, SHF_ALLOC,
-        dynsym, sizeof(dynsym), base_vaddr+dynsym_off, 8, NULL, NULL);
+    // Mostrar permisos de ejecución
+    printf("Para hacer el archivo ejecutable: chmod +x salida_exec.elf\n");
 
-    // .rela.plt
-    struct { uint64_t r_offset, r_info; int64_t r_addend; } rela_plt[1];
-    rela_plt[0].r_offset = gotplt_addr + 8;
-    rela_plt[0].r_info = ((1ULL)<<32) | 0x7; // símbolo 1, tipo JMP_SLOT
-    rela_plt[0].r_addend = 0;
-    elf_builder_add_section(b, ".rela.plt", SHT_RELA, SHF_ALLOC,
-        rela_plt, sizeof(rela_plt), base_vaddr+rela_plt_off, 8, NULL, NULL);
+    // Liberar recursos
+    elf_builder_free(b);
 
-    // .dynamic
-    struct { int64_t tag; uint64_t val; } dynamic[] = {
-        {1, base_vaddr+dynstr_off},      // DT_STRTAB
-        {5, base_vaddr+dynsym_off},      // DT_SYMTAB
-        {6, sizeof(dynsym[0])},          // DT_SYMENT
-        {0x17, base_vaddr+rela_plt_off}, // DT_JMPREL
-        {0x7, sizeof(rela_plt)},         // DT_PLTRELSZ
-        {0x2, 0x7},                      // DT_PLTREL (RELA)
-        {0xf, gotplt_addr},              // DT_PLTGOT
-        {0x1d, base_vaddr+plt_off},      // DT_PLT
-        {0x1e, sizeof(plt)},             // DT_PLTSZ
-        {0xe, 1},                        // DT_SONAME (dummy)
-        {0x0, 0}                         // DT_NULL
-    };
-    elf_builder_add_section(b, ".dynamic", SHT_DYNAMIC, SHF_ALLOC|SHF_WRITE,
-        dynamic, sizeof(dynamic), base_vaddr+dynamic_off, 8, NULL, NULL);
+    // Verificar el ELF generado
+    f = fopen("salida_exec.elf", "rb");
+    if (!f) {
+        perror("No se pudo abrir el archivo generado para verificación");
+        return 1;
+    }
 
-    // --- Parchear el código ---
-    *(uint64_t *)(b->mem + text_section_off + 2) = data_section_vaddr;
-    uint64_t rip_after_call = text_section_vaddr + 11;
-    int32_t rel = (int32_t)(plt_addr - rip_after_call);
-    *(int32_t *)(b->mem + text_section_off + 10) = rel;
+    // Leer el archivo para verificación
+    fseek(f, 0, SEEK_END);
+    size_t fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
 
-    // --- Finalizar ELF ---
-    elf_builder_finalize_exec64(
-        b,
-        text_section_vaddr, // entry point
-        text_section_off,
-        text_section_vaddr,
-        sizeof(code)
-    );
+    void *mem = malloc(fsize);
+    if (!mem) {
+        perror("No se pudo asignar memoria para verificación");
+        fclose(f);
+        return 1;
+    }
 
-    // --- Escribir a disco ---
-    FILE *f = fopen("salida_printf.elf", "wb");
-    fwrite(b->mem, 1, b->size, f);
+    if (fread(mem, 1, fsize, f) != fsize) {
+        perror("Error al leer el archivo para verificación");
+        free(mem);
+        fclose(f);
+        return 1;
+    }
+
     fclose(f);
 
-    printf("ELF ejecutable generado: salida_printf.elf (%zu bytes)\n", b->size);
-    printf("chmod +x salida_printf.elf && ./salida_printf.elf\n");
+    // Analizar y mostrar información del ELF
+    ElfFile elf;
+    if (!elf_mem_parse(&elf, mem, fsize)) {
+        printf("El archivo generado no es un ELF válido\n");
+        free(mem);
+        return 1;
+    }
 
-    elf_builder_free(b);
+    show_elf_info(&elf);
+    free(mem);
+
     return 0;
 }
