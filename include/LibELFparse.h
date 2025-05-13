@@ -117,11 +117,28 @@ typedef uint32_t Elf32_Addr;	// Unsigned address / Direccion sin signo
 typedef uint32_t Elf32_Word;	// Unsigned int     / Entero sin signo
 typedef int32_t  Elf32_Sword;	// Signed int       / Entero con signo
 
-typedef int64_t  Elf64_Sword;	// Signed int       / Entero con signo
-typedef uint64_t Elf64_Word;	// Unsigned int     / Entero sin signo
+typedef uint32_t Elf64_Word;	// Unsigned int     / Entero sin signo
 typedef uint64_t Elf64_Addr;	// Unsigned address / Direccion sin signo
 typedef uint64_t Elf64_Off;	    // Unsigned offset  / Desplazamiento sin signo
-typedef uint32_t Elf64_Half;	// Mitad sin signo
+typedef uint16_t Elf64_Half;	// Mitad sin signo
+
+typedef int32_t		Elf64_Sword;
+typedef int64_t		Elf64_Sxword;
+typedef uint64_t	Elf64_Lword;
+typedef uint64_t	Elf64_Xword;
+
+/*
+ * Types of dynamic symbol hash table bucket and chain elements.
+ *
+ * This is inconsistent among 64 bit architectures, so a machine dependent
+ * typedef is required.
+ */
+
+typedef Elf64_Word	Elf64_Hashelt;
+
+/* Non-standard class-dependent datatype used for abstraction. */
+typedef Elf64_Xword	Elf64_Size;
+typedef Elf64_Sxword Elf64_Ssize;
 
 /**
  * El encabezado ELF es el primero de un archivo ELF y proporciona informacion importante sobre
@@ -150,36 +167,36 @@ enum Elf_Ident {
 
 // OS ABI identification.
 enum {
-  ELFOSABI_NONE = 0,           // UNIX System V ABI
-  ELFOSABI_SYSV = ELFOSABI_NONE,
-  ELFOSABI_HPUX = 1,           // HP-UX operating system
-  ELFOSABI_NETBSD = 2,         // NetBSD
-  ELFOSABI_GNU = 3,            // GNU/Linux
-  ELFOSABI_LINUX = 3,          // Historical alias for ELFOSABI_GNU.
-  ELFOSABI_HURD = 4,           // GNU/Hurd
-  ELFOSABI_SOLARIS = 6,        // Solaris
-  ELFOSABI_AIX = 7,            // AIX
-  ELFOSABI_IRIX = 8,           // IRIX
-  ELFOSABI_FREEBSD = 9,        // FreeBSD
-  ELFOSABI_TRU64 = 10,         // TRU64 UNIX
-  ELFOSABI_MODESTO = 11,       // Novell Modesto
-  ELFOSABI_OPENBSD = 12,       // OpenBSD
-  ELFOSABI_OPENVMS = 13,       // OpenVMS
-  ELFOSABI_NSK = 14,           // Hewlett-Packard Non-Stop Kernel
-  ELFOSABI_AROS = 15,          // AROS
-  ELFOSABI_FENIXOS = 16,       // FenixOS
-  ELFOSABI_CLOUDABI = 17,      // Nuxi CloudABI
-  ELFOSABI_CUDA = 51,          // NVIDIA CUDA architecture.
-  ELFOSABI_FIRST_ARCH = 64,    // First architecture-specific OS ABI
-  ELFOSABI_AMDGPU_HSA = 64,    // AMD HSA runtime
-  ELFOSABI_AMDGPU_PAL = 65,    // AMD PAL runtime
-  ELFOSABI_AMDGPU_MESA3D = 66, // AMD GCN GPUs (GFX6+) for MESA runtime
-  ELFOSABI_ARM = 97,           // ARM
-  ELFOSABI_ARM_FDPIC = 65,     // ARM FDPIC
-  ELFOSABI_C6000_ELFABI = 64,  // Bare-metal TMS320C6000
-  ELFOSABI_C6000_LINUX = 65,   // Linux TMS320C6000
-  ELFOSABI_STANDALONE = 255,   // Standalone (embedded) application
-  ELFOSABI_LAST_ARCH = 255     // Last Architecture-specific OS ABI
+    ELFOSABI_NONE = 0,           // UNIX System V ABI
+    ELFOSABI_SYSV = ELFOSABI_NONE,
+    ELFOSABI_HPUX = 1,           // HP-UX operating system
+    ELFOSABI_NETBSD = 2,         // NetBSD
+    ELFOSABI_GNU = 3,            // GNU/Linux
+    ELFOSABI_LINUX = 3,          // Historical alias for ELFOSABI_GNU.
+    ELFOSABI_HURD = 4,           // GNU/Hurd
+    ELFOSABI_SOLARIS = 6,        // Solaris
+    ELFOSABI_AIX = 7,            // AIX
+    ELFOSABI_IRIX = 8,           // IRIX
+    ELFOSABI_FREEBSD = 9,        // FreeBSD
+    ELFOSABI_TRU64 = 10,         // TRU64 UNIX
+    ELFOSABI_MODESTO = 11,       // Novell Modesto
+    ELFOSABI_OPENBSD = 12,       // OpenBSD
+    ELFOSABI_OPENVMS = 13,       // OpenVMS
+    ELFOSABI_NSK = 14,           // Hewlett-Packard Non-Stop Kernel
+    ELFOSABI_AROS = 15,          // AROS
+    ELFOSABI_FENIXOS = 16,       // FenixOS
+    ELFOSABI_CLOUDABI = 17,      // Nuxi CloudABI
+    ELFOSABI_CUDA = 51,          // NVIDIA CUDA architecture.
+    ELFOSABI_FIRST_ARCH = 64,    // First architecture-specific OS ABI
+    ELFOSABI_AMDGPU_HSA = 64,    // AMD HSA runtime
+    ELFOSABI_AMDGPU_PAL = 65,    // AMD PAL runtime
+    ELFOSABI_AMDGPU_MESA3D = 66, // AMD GCN GPUs (GFX6+) for MESA runtime
+    ELFOSABI_ARM = 97,           // ARM
+    ELFOSABI_ARM_FDPIC = 65,     // ARM FDPIC
+    ELFOSABI_C6000_ELFABI = 64,  // Bare-metal TMS320C6000
+    ELFOSABI_C6000_LINUX = 65,   // Linux TMS320C6000
+    ELFOSABI_STANDALONE = 255,   // Standalone (embedded) application
+    ELFOSABI_LAST_ARCH = 255     // Last Architecture-specific OS ABI
 };
 
 
@@ -244,25 +261,24 @@ typedef struct Elf32_Header {
 } Elf32_Header;
 
 typedef struct Elf64_Header {
-    uint8_t         e_ident[ELF_NIDENT];
-    Elf32_Half      e_type;	/* Relocatable=1, Executable=2 (+ some
-                 * more ..) */
-    Elf32_Half      e_machine;	/* Target architecture: MIPS=8 */
-    Elf32_Word      e_version;	/* Elf version (should be 1) */
-    Elf64_Addr      e_entry;	/* Code entry point */
-    Elf64_Off       e_phoff;	/* Program header table */
-    Elf64_Off       e_shoff;	/* Section header table */
-    Elf32_Word      e_flags;	/* Flags */
-    Elf32_Half      e_ehsize;	/* ELF header size */
-    Elf32_Half      e_phentsize;	/* Size of one program segment
-                                    * header */
-    Elf32_Half      e_phnum;	/* Number of program segment
-                                * headers */
-    Elf32_Half      e_shentsize;	/* Size of one section header */
-    Elf32_Half      e_shnum;	/* Number of section headers */
-    Elf32_Half      e_shstrndx;	/* Section header index of the
-                     * string table for section header
-                     * * names */
+    uint8_t e_ident[ELF_NIDENT];
+    Elf64_Half e_type;      /* Reubicable=1, Ejecutable=2 (+ algunos * más...) */
+    Elf64_Half e_machine;   /* Arquitectura de destino: MIPS=8 */
+    Elf64_Word e_version;   /* Versión de Elf (debe ser 1) */
+    Elf64_Addr e_entry;     /* Punto de entrada del código */
+    Elf64_Off e_phoff;      /* Tabla de encabezados de programa */
+    Elf64_Off e_shoff;      /* Tabla de encabezados de sección */
+    Elf64_Word e_flags;     /* Banderas */
+    Elf64_Half e_ehsize;    /* Tamaño del encabezado ELF */
+    Elf64_Half e_phentsize; /* Tamaño de un segmento de programa
+    * header */
+    Elf64_Half e_phnum;     /* Número de segmento de programa
+                             * encabezados */
+    Elf64_Half e_shentsize; /* Tamaño de un encabezado de sección */
+    Elf64_Half e_shnum;     /* Número de encabezados de sección */
+    Elf64_Half e_shstrndx;  /* Índice de encabezado de sección de la
+                             * tabla de cadenas para el encabezado de sección
+                             * * nombres */
 } Elf64_Header;
 
 /**
@@ -285,18 +301,24 @@ typedef struct Elf32_Shdr {
     Elf32_Word	sh_addralign;
     Elf32_Word	sh_entsize;
 } Elf32_Shdr;
-typedef struct Elf64_Shdr {
-    Elf32_Word      sh_name;
-    Elf32_Word      sh_type;
-    Elf64_Word      sh_flags;
-    Elf64_Addr      sh_addr;
-    Elf64_Off       sh_offset;
-    Elf64_Word      sh_size;
-    Elf32_Word      sh_link;
-    Elf32_Word      sh_info;
-    Elf64_Word      sh_addralign;
-    Elf64_Word      sh_entsize;
+/*
+ * Section header.
+ */
+
+typedef struct {
+	Elf64_Word	sh_name;	/* Section name (index into the
+					   section header string table). */
+	Elf64_Word	sh_type;	/* Section type. */
+	Elf64_Xword	sh_flags;	/* Section flags. */
+	Elf64_Addr	sh_addr;	/* Address in memory image. */
+	Elf64_Off	sh_offset;	/* Offset in file. */
+	Elf64_Xword	sh_size;	/* Size in bytes. */
+	Elf64_Word	sh_link;	/* Index of a related section. */
+	Elf64_Word	sh_info;	/* Depends on section type. */
+	Elf64_Xword	sh_addralign;	/* Alignment in bytes. */
+	Elf64_Xword	sh_entsize;	/* Size of each entry in section. */
 } Elf64_Shdr;
+
 
 
 
@@ -484,7 +506,7 @@ typedef struct Elf64_Sym {
     uint8_t     st_other;  // Visibilidad del simbolo
     Elf64_Half  st_shndx;  // indice de la seccion a la que pertenece el simbolo
     Elf64_Addr  st_value;  // Valor del simbolo (direccion)
-    Elf64_Word  st_size;   // Tamaño del objeto (si aplica)
+    Elf64_Xword st_size;   // Tamaño del objeto (si aplica)
 } Elf64_Sym;
 
 
@@ -618,12 +640,12 @@ typedef struct Elf32_Rela {
 
 typedef struct {
     Elf64_Addr  r_offset;   // Direccion donde aplicar la reubicacion
-    Elf64_Word r_info;     // Tipo y simbolo relacionados con la reubicacion
+    Elf64_Xword r_info;     // Tipo y simbolo relacionados con la reubicacion
 } Elf64_Rel;
 
 typedef struct {
     Elf64_Addr  r_offset;   // Direccion donde aplicar la reubicacion
-    Elf64_Word r_info;     // Tipo y simbolo relacionados con la reubicacion
+    Elf64_Xword r_info;     // Tipo y simbolo relacionados con la reubicacion
     Elf64_Sword r_addend;  // Valor constante adicional
 } Elf64_Rela;
 
@@ -706,24 +728,19 @@ typedef struct Elf32_Phdr {
     Elf32_Word		p_flags;
     Elf32_Word		p_align;
 } Elf32_Phdr;
-typedef struct Elf64_Phdr {
-    Elf32_Word      p_type;	/* Segment type: Loadable segment = 1 */
-    Elf32_Word      p_flags;	/* Flags: logical "or" of PF_
-                     * constants below */
-    Elf64_Off       p_offset;	/* Offset of segment in file */
-    Elf64_Addr      p_vaddr;	/* Reqd virtual address of segment
-                     * when loading */
-    Elf64_Addr      p_paddr;	/* Reqd physical address of
-                     * segment */
-    Elf32_Word      p_filesz;	/* How many bytes this segment
-                     * occupies in file */
-    Elf64_Word      p_memsz;	/* How many bytes this segment
-                     * should occupy in * memory (when
-                     * * loading, expand the segment
-                     * by * concatenating enough zero
-                     * bytes to it) */
-    Elf64_Word      p_align;	/* Reqd alignment of segment in
-                     * memory */
+
+/*
+ * Program header.
+ */
+typedef struct {
+	Elf64_Word	p_type;		/* Entry type. */
+	Elf64_Word	p_flags;	/* Access permission flags. */
+	Elf64_Off	p_offset;	/* File offset of contents. */
+	Elf64_Addr	p_vaddr;	/* Virtual address in memory image. */
+	Elf64_Addr	p_paddr;	/* Physical address (not used). */
+	Elf64_Xword	p_filesz;	/* Size of contents in file. */
+	Elf64_Xword	p_memsz;	/* Size of contents in memory. */
+	Elf64_Xword	p_align;	/* Alignment in memory and file. */
 } Elf64_Phdr;
 
 static inline Elf32_Phdr *elf32_getProgramHeaderTable(Elf32_Header *file)
@@ -776,17 +793,20 @@ static inline Elf64_Phdr *elf64_getProgramHeaderTable(Elf64_Header *file)
 #define DT_NUM          34  // Número de entradas definidas
 
 
+
+/*
+ * Dynamic structure.  The ".dynamic" section contains an array of them.
+ */
+typedef struct {
+	Elf64_Sxword	d_tag;	/* Entry type. */
+	union {
+		Elf64_Xword	d_val;	/* Integer value. */
+		Elf64_Addr	d_ptr;	/* Address value. */
+	} d_un;
+} Elf64_Dyn;
 /**
  * Seccion dinamica (.dynamic)
  */
-typedef struct Elf64_Dyn {
-    Elf64_Word d_tag;
-    union {
-        Elf64_Word d_val;
-        Elf64_Word d_ptr;
-    } d_un;
-} Elf64_Dyn;
-
 typedef struct {
     Elf32_Sword d_tag;     // Tipo de entrada (por ejemplo, DT_NEEDED, DT_STRTAB, etc.)
     union {
