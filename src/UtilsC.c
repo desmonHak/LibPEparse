@@ -84,7 +84,7 @@ void* reserve_memory(size_t size, int prot, int flags) {
  */
 int free_reserved_memory(void* addr, size_t size) {
 #if defined(_WIN32)
-    UNUSED(size); // en windows no se usara este arg
+    UNUSED_ARG(size); // en windows no se usara este arg
     return VirtualFree(addr, 0, MEM_RELEASE) ? 0 : -1;
 #else
     return munmap(addr, size);

@@ -2,8 +2,8 @@
 #define LIB_ELF_PARSE_H
 
 // para parametros que no se usaran bajo ciertas circustancias
-#ifndef UNUSED
-#define UNUSED(x) (void)(x)
+#ifndef UNUSED_ARG
+#define UNUSED_ARG(x) (void)(x)
 #endif
 
 // https://stevens.netmeister.org/631/elf.html
