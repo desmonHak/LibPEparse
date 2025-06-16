@@ -49,7 +49,7 @@ int main() {
     // Allocate enough capacity. Ensure it's large enough for headers, code, and section headers.
     // We'll have two program headers for code/data and stack.
     size_t capacity = 16 * PAGE_SIZE;
-    ElfBuilder *b = elf_builder_create_exec64(capacity);
+    ElfBuilder *b = elf_builder_create_exec64(capacity, 2);
     if (!b) {
         fprintf(stderr, "No se pudo crear el ElfBuilder\n");
         return 1;
@@ -57,16 +57,6 @@ int main() {
     // Program headers are placed immediately after Elf64_Ehdr.
     // `b->phdr` already points to this memory location within `b->mem`.
     Elf64_Phdr *phdr = (Elf64_Phdr *)b->phdr;
-    // Clear the program header entries to ensure a clean state before populating them.
-    // This is important as calloc might only zero the initial structures.
-    memset(phdr, 0, b->phnum * sizeof(Elf64_Phdr));
-
-    // Set the number of program headers *before* adding sections if they occupy space after ehdr.
-    // For this example, we need 2 program headers: one for the code/data segment and one for the stack.
-    b->phnum = 2; // IMPORTANT: Must be set to the correct number of program headers you intend to use.
-    // Re-adjust b->size as phnum has increased. elf_builder_create_exec64 sets it for 1 phdr.
-    b->size = sizeof(Elf64_Ehdr) + b->phnum * sizeof(Elf64_Phdr);
-
 
     // Align the start of the .text section to a new page in the file.
     // This is where the actual code content will begin after ELF and program headers.

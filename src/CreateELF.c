@@ -13,7 +13,7 @@
 
 // Initializes a new ElfBuilder for a 64-bit executable.
 // Allocates main memory buffer and temporary section header/string table buffers.
-ElfBuilder *elf_builder_create_exec64(size_t capacity) {
+ElfBuilder *elf_builder_create_exec64(size_t capacity, size_t number_program_headers) {
     // Allocate the main ElfBuilder structure
     ElfBuilder *b = calloc(1, sizeof(ElfBuilder));
     if (!b) {
@@ -53,7 +53,9 @@ ElfBuilder *elf_builder_create_exec64(size_t capacity) {
 
     // Program headers (Elf64_Phdr) immediately follow the ELF header.
     b->phdr = b->mem + b->size;
-    b->phnum = 1; // Fixed for example: 2 PT_LOAD, 1 PT_INTERP, 1 PT_DYNAMIC, 1 NULL (for alignment/placeholder)
+
+    // example: 2 PT_LOAD, 1 PT_INTERP, 1 PT_DYNAMIC, 1 NULL (for alignment/placeholder)
+    b->phnum = number_program_headers;
     b->size += b->phnum * sizeof(Elf64_Phdr); // Increase buffer size to account for program headers
 
     // Initialize the temporary section header table.

@@ -36,7 +36,7 @@ int main() {
 
     uint64_t base_vaddr = 0x400000; // Base virtual address for loading the executable
     size_t capacity = 16 * PAGE_SIZE; // Sufficient capacity for the ELF file (16 pages)
-    ElfBuilder *b = elf_builder_create_exec64(capacity);
+    ElfBuilder *b = elf_builder_create_exec64(capacity, 4);
 
     if (!b) {
         fprintf(stderr, "Error creating ELF builder\n");

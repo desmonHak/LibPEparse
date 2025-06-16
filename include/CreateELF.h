@@ -161,7 +161,7 @@ typedef struct {
 
 // Crea un ElfBuilder para generar un ejecutable de 64 bits
 // capacity: Tamaño máximo estimado para el archivo ELF
-ElfBuilder *elf_builder_create_exec64(size_t capacity);
+ElfBuilder *elf_builder_create_exec64(size_t capacity, size_t number_program_headers);
 
 
 // Añade una sección al ELF
