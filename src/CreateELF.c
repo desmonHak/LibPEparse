@@ -4,200 +4,107 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h> // For fprintf, etc., for error reporting
 
 #include "CreateELF.h"
 #include "LibELFparse.h"
+// Define initial section header table capacity
+#define INITIAL_SHDR_CAPACITY 16
 
+// Initializes a new ElfBuilder for a 64-bit executable.
+// Allocates main memory buffer and temporary section header/string table buffers.
 ElfBuilder *elf_builder_create_exec64(size_t capacity) {
+    // Allocate the main ElfBuilder structure
     ElfBuilder *b = calloc(1, sizeof(ElfBuilder));
-    if (!b) return NULL;
+    if (!b) {
+        fprintf(stderr, "Error: Failed to allocate ElfBuilder structure.\n");
+        return NULL;
+    }
 
+    // Allocate the main memory buffer that will hold the entire ELF file content.
+    // `calloc` ensures this memory is initialized to zeros.
     b->mem = calloc(1, capacity);
     if (!b->mem) {
+        fprintf(stderr, "Error: Failed to allocate main ELF memory buffer.\n");
         free(b);
         return NULL;
     }
 
     b->capacity = capacity;
-    b->size = 0;
-    b->is64 = 1;
+    b->size = 0; // Current size of data in the buffer
+    b->is64 = 1; // Mark as 64-bit ELF
 
-    // Inicializar shstrtab con un byte nulo inicial
-    b->shstrtab_cap = 256;
+    // Initialize shstrtab (section header string table) buffer.
+    // It starts with a mandatory null byte at offset 0.
+    b->shstrtab_cap = 256; // Initial capacity
     b->shstrtab = calloc(1, b->shstrtab_cap);
     if (!b->shstrtab) {
+        fprintf(stderr, "Error: Failed to allocate shstrtab buffer.\n");
         free(b->mem);
         free(b);
         return NULL;
     }
-    b->shstrtab_len = 1; // Primer byte siempre es nulo
+    b->shstrtab_len = 1; // First byte is always null
 
-    // Reservar espacio para header y program header
+    // Reserve space for ELF header and program headers at the beginning of the memory buffer.
+    // The ELF header (Elf64_Ehdr) comes first.
     b->ehdr = b->mem;
-    b->size = sizeof(Elf64_Header);
-    b->phdr = b->mem + b->size;
-    b->size += 4 * sizeof(Elf64_Phdr); // 4 secciones a reservar
+    b->size = sizeof(Elf64_Ehdr);
 
-    // Inicializar la tabla de secciones (temporalmente)
-    b->shdr = calloc(16, sizeof(Elf64_Shdr)); // Espacio para 16 secciones
-    if (!b->shdr) {
+    // Program headers (Elf64_Phdr) immediately follow the ELF header.
+    b->phdr = b->mem + b->size;
+    b->phnum = 5; // Fixed for this example: 2 PT_LOAD, 1 PT_INTERP, 1 PT_DYNAMIC, 1 NULL (for alignment/placeholder)
+    b->size += b->phnum * sizeof(Elf64_Phdr); // Increase buffer size to account for program headers
+
+    // Initialize the temporary section header table.
+    // This table is built up in a separate buffer (`shdr_temp`) and copied to `b->mem` later during finalization.
+    b->shdr_temp = calloc(INITIAL_SHDR_CAPACITY, sizeof(Elf64_Shdr));
+    if (!b->shdr_temp) {
+        fprintf(stderr, "Error: Failed to allocate temporary section header table.\n");
         free(b->shstrtab);
         free(b->mem);
         free(b);
         return NULL;
     }
 
-    // Inicializar con una sección NULL (obligatoria)
-    b->shnum = 1; // sección NULL
-    b->phnum = 4;
+    // Initialize with a NULL section (mandatory first section, index 0).
+    // shnum tracks the number of actual sections added (starting from 1 for SHT_NULL).
+    b->shnum = 1; // Section 0 is always SHT_NULL
+    // shstrndx will be updated later to point to the actual .shstrtab section index.
     b->shstrndx = 0;
 
     return b;
 }
 
-size_t elf_builder_add_section(ElfBuilder *b, const char *name, uint32_t type, uint64_t flags,
-                               const void *data, size_t size, uint64_t vaddr, uint64_t align,
-                               size_t *out_offset, uint64_t *out_vaddr) {
-    // Alineación de offset de archivo
-    size_t align_mask = align ? align - 1 : 0;
-    if (align && (b->size & align_mask)) {
-        b->size = (b->size + align_mask) & ~align_mask;
+// Helper function to resize the temporary section header table (b->shdr_temp) if needed.
+static int resize_shdr_temp(ElfBuilder *b) {
+    // Double the current number of sections to determine new capacity.
+    size_t new_cap = b->shnum * 2;
+    // Ensure new capacity is at least double the initial capacity if it's currently very small.
+    if (new_cap < INITIAL_SHDR_CAPACITY) new_cap = INITIAL_SHDR_CAPACITY * 2;
+
+    void *new_shdr = realloc(b->shdr_temp, new_cap * sizeof(Elf64_Shdr));
+    if (!new_shdr) {
+        fprintf(stderr, "Error: Failed to reallocate temporary section header table.\n");
+        return 0; // Failed to reallocate
     }
-    size_t file_off = b->size;
-
-    // Alineación de dirección virtual
-    uint64_t va = vaddr;
-    if (align && (va & align_mask)) {
-        va = (va + align_mask) & ~align_mask;
-    }
-
-    // Copia el nombre a shstrtab
-    size_t name_off = b->shstrtab_len;
-    size_t namelen = strlen(name) + 1;
-    if (b->shstrtab_len + namelen > b->shstrtab_cap) {
-        size_t new_cap = b->shstrtab_cap * 2;
-        char *new_strtab = realloc(b->shstrtab, new_cap);
-        if (!new_strtab) return 0;
-        b->shstrtab = new_strtab;
-        b->shstrtab_cap = new_cap;
-    }
-    memcpy(b->shstrtab + b->shstrtab_len, name, namelen);
-    b->shstrtab_len += namelen;
-
-    // Copia los datos de la sección
-    if (data && size) {
-        memcpy(b->mem + file_off, data, size);
-        b->size = file_off + size;
-    }
-
-    // Descriptor de sección
-    Elf64_Shdr *shdr = (Elf64_Shdr *)b->shdr;
-    Elf64_Shdr *s = &shdr[b->shnum];
-    memset(s, 0, sizeof(*s));
-    s->sh_name = name_off;
-    s->sh_type = type;
-    s->sh_flags = flags;
-    s->sh_addr = va;
-    s->sh_offset = file_off;
-    s->sh_size = size;
-    s->sh_addralign = align ? align : 1;
-
-    if (out_offset) *out_offset = file_off;
-    if (out_vaddr)  *out_vaddr = va;
-    return b->shnum++;
+    b->shdr_temp = new_shdr;
+    // Initialize newly allocated memory to zero to prevent garbage values.
+    memset((uint8_t*)b->shdr_temp + b->shnum * sizeof(Elf64_Shdr), 0, (new_cap - b->shnum) * sizeof(Elf64_Shdr));
+    return 1;
 }
 
-// Finaliza el ELF ejecutable
-void elf_builder_finalize_exec64(ElfBuilder *b, uint64_t entry, size_t code_file_off, uint64_t code_vaddr, size_t code_size) {
-    // Añadir la sección .shstrtab si no existe
-    size_t shstrtab_name_off = b->shstrtab_len;
-    const char *shstrtab_name = ".shstrtab";
-    size_t shstrtab_namelen = strlen(shstrtab_name) + 1;
-
-    // Asegurar capacidad en shstrtab
-    if (b->shstrtab_len + shstrtab_namelen > b->shstrtab_cap) {
-        size_t new_cap = b->shstrtab_cap * 2;
-        char *new_strtab = realloc(b->shstrtab, new_cap);
-        if (!new_strtab) return;
-        b->shstrtab = new_strtab;
-        b->shstrtab_cap = new_cap;
-    }
-
-    // Añadir nombre de sección
-    memcpy(b->shstrtab + b->shstrtab_len, shstrtab_name, shstrtab_namelen);
-    b->shstrtab_len += shstrtab_namelen;
-
-    // Alinear el offset para una mejor compatibilidad
-    if (b->size % 4 != 0) {
-        b->size = (b->size + 3) & ~3;
-    }
-
-    // Añadir el contenido de .shstrtab
-    size_t shstrtab_off = b->size;
-    memcpy(b->mem + shstrtab_off, b->shstrtab, b->shstrtab_len);
-    b->size += b->shstrtab_len;
-
-    // Añadir el descriptor de sección para .shstrtab
-    Elf64_Shdr *shdr = (Elf64_Shdr *)b->shdr;
-    Elf64_Shdr *s = &shdr[b->shnum];
-    memset(s, 0, sizeof(*s));
-    s->sh_name = shstrtab_name_off;
-    s->sh_type = SHT_STRTAB;
-    s->sh_offset = shstrtab_off;
-    s->sh_size = b->shstrtab_len;
-    s->sh_addralign = 1;
-    b->shstrndx = b->shnum;
-    b->shnum++;
-
-    // Alinear el offset para la tabla de secciones (opcional pero recomendado)
-    if (b->size % 8 != 0) {
-        b->size = (b->size + 7) & ~7;
-    }
-
-    // Copiar la tabla de secciones al final del archivo
-    size_t shdr_offset = b->size;
-    memcpy(b->mem + shdr_offset, b->shdr, b->shnum * sizeof(Elf64_Shdr));
-    b->size += b->shnum * sizeof(Elf64_Shdr);
-
-    // Configurar el ELF header
-    Elf64_Header *ehdr = (Elf64_Header *)b->ehdr;
-    memset(ehdr, 0, sizeof(*ehdr));
-    ehdr->e_ident[EI_MAG0] = ELFMAG0;
-    ehdr->e_ident[EI_MAG1] = ELFMAG1;
-    ehdr->e_ident[EI_MAG2] = ELFMAG2;
-    ehdr->e_ident[EI_MAG3] = ELFMAG3;
-    ehdr->e_ident[EI_CLASS] = ELFCLASS64;
-    ehdr->e_ident[EI_DATA] = ELFDATA2LSB;
-    ehdr->e_ident[EI_VERSION] = EV_CURRENT;
-    ehdr->e_ident[EI_OSABI] = ELFOSABI_SYSV;
-    ehdr->e_ident[EI_ABIVERSION] = 0;
-    ehdr->e_type = ET_EXEC;
-    ehdr->e_machine = EM_X86_64;
-    ehdr->e_version = EV_CURRENT;
-    ehdr->e_entry = entry;
-    ehdr->e_phoff = sizeof(Elf64_Header);
-    ehdr->e_shoff = shdr_offset;
-    ehdr->e_flags = 0;
-    ehdr->e_ehsize = sizeof(Elf64_Header);
-    ehdr->e_phentsize = sizeof(Elf64_Phdr);
-    ehdr->e_phnum = b->phnum;
-    ehdr->e_shentsize = sizeof(Elf64_Shdr);
-    ehdr->e_shnum = b->shnum;
-    ehdr->e_shstrndx = b->shstrndx;
-
-    // Configurar el Program Header
-    Elf64_Phdr *phdr = (Elf64_Phdr *)b->phdr;
-    memset(phdr, 0, sizeof(*phdr));
-    phdr->p_type = PT_LOAD;
-    phdr->p_offset = code_file_off;
-    phdr->p_vaddr = code_vaddr;
-    phdr->p_paddr = code_vaddr;
-    phdr->p_filesz = code_size;
-    phdr->p_memsz = code_size;
-    phdr->p_flags = PF_X | PF_R;
-    phdr->p_align = PAGE_SIZE;
-}
-
+// Adds a section to the ELF file being built.
+// `name`: Name of the section (e.g., ".text", ".data").
+// `type`: Section type (e.g., SHT_PROGBITS, SHT_DYNSYM).
+// `flags`: Section flags (e.g., SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE).
+// `data`: Pointer to the raw data for the section. Can be NULL for SHT_NOBITS.
+// `size`: Size of the raw data.
+// `vaddr`: Virtual address where this section will be loaded (0 if not allocatable).
+// `align`: Required alignment for the section's data.
+// `out_offset`: Optional output for the section's file offset.
+// `out_vaddr`: Optional output for the section's virtual address.
+// `sh_link`, `sh_info`, `sh_entsize`: Extended fields for certain section types (e.g., symbol tables).
 size_t elf_builder_add_section_ex(
     ElfBuilder *b,
     const char *name,
@@ -213,66 +120,210 @@ size_t elf_builder_add_section_ex(
     uint32_t sh_info,
     uint64_t sh_entsize
 ) {
-    // Alineación de offset de archivo
+    // Check if temporary section header table needs resizing before adding a new entry.
+    // `b->shnum` is the *next* available index, so if it equals current capacity, we need to resize.
+    if (b->shnum >= INITIAL_SHDR_CAPACITY && !resize_shdr_temp(b)) {
+        fprintf(stderr, "Error: Temporary section header table is full and cannot be resized.\n");
+        return 0; // Return 0 to indicate failure
+    }
+
+    // Align the current file offset (b->size) based on the provided alignment.
+    // This ensures the section data starts at the correct aligned boundary in the file.
     size_t align_mask = align ? align - 1 : 0;
     if (align && (b->size & align_mask)) {
+        printf("alineando seccion %s a %llu\n", name, align);
         b->size = (b->size + align_mask) & ~align_mask;
     }
-    size_t file_off = b->size;
+    size_t file_off = b->size; // This is the file offset where the section data will start
 
-    // Alineación de dirección virtual
+    // Align the virtual address based on the provided alignment.
+    // This ensures the section maps to memory at the correct aligned virtual address.
     uint64_t va = vaddr;
     if (align && (va & align_mask)) {
         va = (va + align_mask) & ~align_mask;
     }
 
-    // Copia el nombre a shstrtab
-    size_t name_off = b->shstrtab_len;
-    size_t namelen = strlen(name) + 1;
+    // Copy the section name to the section header string table (b->shstrtab).
+    size_t name_off = b->shstrtab_len; // Offset of the name within shstrtab
+    size_t namelen = strlen(name) + 1; // Include null terminator
+
+    // Resize shstrtab buffer if current capacity is insufficient.
     if (b->shstrtab_len + namelen > b->shstrtab_cap) {
         size_t new_cap = b->shstrtab_cap * 2;
         char *new_strtab = realloc(b->shstrtab, new_cap);
-        if (!new_strtab) return 0;
+        if (!new_strtab) {
+            fprintf(stderr, "Error: Failed to resize shstrtab buffer for section name '%s'.\n", name);
+            return 0;
+        }
         b->shstrtab = new_strtab;
         b->shstrtab_cap = new_cap;
     }
     memcpy(b->shstrtab + b->shstrtab_len, name, namelen);
     b->shstrtab_len += namelen;
 
-    // Copia los datos de la sección
-    if (data && size) {
+    // Copy section data to the main ELF memory buffer (`b->mem`).
+    // For SHT_NOBITS sections (like .bss), data is not copied, but size is still accounted for.
+    if (data && size > 0) {
+        // Ensure enough capacity in main memory buffer before copying data.
+        if (file_off + size > b->capacity) {
+            fprintf(stderr, "Error: Not enough capacity in main ELF memory buffer for section data '%s'.\n", name);
+            return 0;
+        }
         memcpy(b->mem + file_off, data, size);
+        b->size = file_off + size; // Update `b->size` to reflect the new end of file data
+    } else if (type != SHT_NOBITS) { // For SHT_NOBITS, size increases but no data is copied from source
         b->size = file_off + size;
     }
 
-    // Descriptor de sección
-    Elf64_Shdr *shdr = (Elf64_Shdr *)b->shdr;
-    Elf64_Shdr *s = &shdr[b->shnum];
-    memset(s, 0, sizeof(*s));
-    s->sh_link = sh_link;
-    s->sh_info = sh_info;
-    s->sh_entsize = sh_entsize;
-    s->sh_name = name_off;
-    s->sh_type = type;
-    s->sh_flags = flags;
-    s->sh_addr = va;
-    s->sh_offset = file_off;
-    s->sh_size = size;
-    s->sh_addralign = align ? align : 1;
 
+    // Fill the section descriptor in the temporary section header table.
+    Elf64_Shdr *shdr_array = (Elf64_Shdr *)b->shdr_temp;
+    Elf64_Shdr *s = &shdr_array[b->shnum]; // Get pointer to the next available section header entry
+    memset(s, 0, sizeof(*s)); // Clear the entry to ensure all fields are zeroed initially
+
+    s->sh_name = name_off;       // Offset of section name in .shstrtab
+    s->sh_type = type;           // Type of section
+    s->sh_flags = flags;         // Attributes (e.g., writable, executable, allocatable)
+    s->sh_addr = va;             // Virtual address (0 if not allocatable)
+    s->sh_offset = file_off;     // Offset of section data in the file
+    s->sh_size = size;           // Size of section data in file/memory
+    s->sh_addralign = align ? align : 1; // Required alignment, default to 1-byte
+    s->sh_link = sh_link;       // Link to another section (e.g., symbol table links to string table)
+    s->sh_info = sh_info;       // Additional info (e.g., first non-local symbol index for SYMTAB)
+    s->sh_entsize = sh_entsize; // Size of each entry if section holds a table (e.g., Elf64_Sym for SYMTAB)
+
+    // Output the file offset and virtual address if requested by the caller.
     if (out_offset) *out_offset = file_off;
     if (out_vaddr)  *out_vaddr = va;
-    return b->shnum++;
+
+    return b->shnum++; // Increment section count and return the index of the newly added section
+}
+
+// Wrapper for the simpler add_section (uses default values for extended fields).
+size_t elf_builder_add_section(ElfBuilder *b, const char *name, uint32_t type, uint64_t flags,
+                               const void *data, size_t size, uint64_t vaddr, uint64_t align,
+                               size_t *out_offset, uint64_t *out_vaddr) {
+    return elf_builder_add_section_ex(b, name, type, flags, data, size, vaddr, align,
+                                      out_offset, out_vaddr, 0, 0, 0); // Default sh_link, sh_info, sh_entsize to 0
 }
 
 
+// Finalizes the ELF executable by populating the ELF header and copying the section header table.
+// The program headers are expected to be set up by the caller directly in b->phdr.
+void elf_builder_finalize_exec64(ElfBuilder *b, uint64_t entry) {
+    // --- Add the .shstrtab section (section names string table) ---
+    // This section contains the names of all other sections. It's usually placed near the end of the file.
+
+    // First, add the ".shstrtab" name itself to the shstrtab buffer.
+    size_t shstrtab_name_in_strtab_off = b->shstrtab_len;
+    const char *shstrtab_name_str = ".shstrtab";
+    size_t shstrtab_name_str_len = strlen(shstrtab_name_str) + 1;
+
+    // Ensure capacity for the string ".shstrtab" in shstrtab buffer itself.
+    if (b->shstrtab_len + shstrtab_name_str_len > b->shstrtab_cap) {
+        size_t new_cap = b->shstrtab_cap * 2;
+        char *new_strtab = realloc(b->shstrtab, new_cap);
+        if (!new_strtab) {
+            fprintf(stderr, "Error: Failed to resize shstrtab for its own name.\n");
+            return;
+        }
+        b->shstrtab = new_strtab;
+        b->shstrtab_cap = new_cap;
+    }
+    memcpy(b->shstrtab + b->shstrtab_len, shstrtab_name_str, shstrtab_name_str_len);
+    b->shstrtab_len += shstrtab_name_str_len;
+
+
+    // Align the file offset where the .shstrtab content will be placed.
+    // Generally, .shstrtab does not require strict alignment for its data in the file, but 4-byte is common.
+    if (b->size % 4 != 0) {
+        b->size = (b->size + 3) & ~3;
+    }
+
+    // Copy the actual content of the shstrtab buffer to the ELF file memory (`b->mem`).
+    size_t shstrtab_content_file_off = b->size;
+    // Ensure enough capacity in main memory buffer for shstrtab content.
+    if (shstrtab_content_file_off + b->shstrtab_len > b->capacity) {
+        fprintf(stderr, "Error: Not enough capacity in ELF memory buffer for .shstrtab content.\n");
+        return;
+    }
+    memcpy(b->mem + shstrtab_content_file_off, b->shstrtab, b->shstrtab_len);
+    b->size += b->shstrtab_len;
+
+    // Add the section descriptor for .shstrtab to the temporary shdr array (`b->shdr_temp`).
+    // Check if temporary section header table needs resizing for .shstrtab entry.
+    if (b->shnum >= INITIAL_SHDR_CAPACITY && !resize_shdr_temp(b)) {
+        fprintf(stderr, "Error: Failed to resize section header table for .shstrtab entry.\n");
+        return;
+    }
+    Elf64_Shdr *shdr_array = (Elf64_Shdr *)b->shdr_temp;
+    Elf64_Shdr *shstrtab_shdr = &shdr_array[b->shnum];
+    memset(shstrtab_shdr, 0, sizeof(*shstrtab_shdr)); // Clear the entry
+    shstrtab_shdr->sh_name = shstrtab_name_in_strtab_off; // Offset of ".shstrtab" name in shstrtab
+    shstrtab_shdr->sh_type = SHT_STRTAB;
+    shstrtab_shdr->sh_flags = 0; // String tables typically don't have alloc/write flags
+    shstrtab_shdr->sh_addr = 0; // No virtual address for string table contents
+    shstrtab_shdr->sh_offset = shstrtab_content_file_off;
+    shstrtab_shdr->sh_size = b->shstrtab_len;
+    shstrtab_shdr->sh_addralign = 1; // 1-byte alignment
+
+    b->shstrndx = b->shnum; // Mark this section's index as the section header string table index
+    b->shnum++; // Increment section count
+
+
+    // --- Copy the temporary section header table to the end of the ELF file memory (`b->mem`) ---
+    // Align the offset for the final Section Header Table (SHT).
+    // For 64-bit ELF, 8-byte alignment for the SHT is typical.
+    if (b->size % 8 != 0) {
+        b->size = (b->size + 7) & ~7;
+    }
+
+    size_t final_shdr_offset = b->size;
+    // Ensure enough capacity in main memory buffer for final SHT.
+    if (final_shdr_offset + b->shnum * sizeof(Elf64_Shdr) > b->capacity) {
+        fprintf(stderr, "Error: Not enough capacity in ELF memory buffer for final section header table.\n");
+        return;
+    }
+    memcpy(b->mem + final_shdr_offset, b->shdr_temp, b->shnum * sizeof(Elf64_Shdr));
+    b->size += b->shnum * sizeof(Elf64_Shdr);
+
+
+    // --- Configure the ELF header ---
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)b->ehdr; // `ehdr` points to the beginning of `b->mem`
+    memset(ehdr, 0, sizeof(Elf64_Ehdr)); // Clear it to ensure all fields are set correctly
+
+    ehdr->e_ident[EI_MAG0] = ELFMAG0;
+    ehdr->e_ident[EI_MAG1] = ELFMAG1;
+    ehdr->e_ident[EI_MAG2] = ELFMAG2;
+    ehdr->e_ident[EI_MAG3] = ELFMAG3;
+    ehdr->e_ident[EI_CLASS] = ELFCLASS64;      // 64-bit ELF
+    ehdr->e_ident[EI_DATA] = ELFDATA2LSB;      // Little-endian
+    ehdr->e_ident[EI_VERSION] = EV_CURRENT;    // Current ELF version
+    ehdr->e_ident[EI_OSABI] = ELFOSABI_SYSV;   // Standard System V ABI
+    ehdr->e_ident[EI_ABIVERSION] = 0;          // No specific ABI version
+    ehdr->e_type = ET_EXEC;                    // Executable file
+    ehdr->e_machine = EM_X86_64;               // x86-64 architecture
+    ehdr->e_version = EV_CURRENT;              // ELF current version
+    ehdr->e_entry = entry;                     // Entry point virtual address (provided by caller)
+    ehdr->e_phoff = sizeof(Elf64_Ehdr);        // Program headers are located right after the ELF header
+    ehdr->e_shoff = final_shdr_offset;         // Section header table is at the end of the file
+    ehdr->e_flags = 0;                         // No specific flags for x86-64
+    ehdr->e_ehsize = sizeof(Elf64_Ehdr);       // Size of ELF header
+    ehdr->e_phentsize = sizeof(Elf64_Phdr);    // Size of program header entry
+    ehdr->e_phnum = b->phnum;                  // Number of program header entries (set in `create_exec64`)
+    ehdr->e_shentsize = sizeof(Elf64_Shdr);    // Size of section header entry
+    ehdr->e_shnum = b->shnum;                  // Number of section header entries
+    ehdr->e_shstrndx = b->shstrndx;            // Index of section name string table
+}
+
+// Frees all memory allocated by the ElfBuilder.
 void elf_builder_free(ElfBuilder *b) {
     if (b) {
-        free(b->mem);
-        free(b->shstrtab);
-        free(b->shdr);
-        free(b);
+        free(b->mem);       // Free the main ELF memory buffer
+        free(b->shstrtab);  // Free the section name string table buffer
+        free(b->shdr_temp); // Free the temporary section header array
+        free(b);            // Free the ElfBuilder structure itself
     }
 }
 
-#endif
+#endif // CREATE_ELF_C
