@@ -53,7 +53,7 @@ ElfBuilder *elf_builder_create_exec64(size_t capacity) {
 
     // Program headers (Elf64_Phdr) immediately follow the ELF header.
     b->phdr = b->mem + b->size;
-    b->phnum = 5; // Fixed for this example: 2 PT_LOAD, 1 PT_INTERP, 1 PT_DYNAMIC, 1 NULL (for alignment/placeholder)
+    b->phnum = 1; // Fixed for example: 2 PT_LOAD, 1 PT_INTERP, 1 PT_DYNAMIC, 1 NULL (for alignment/placeholder)
     b->size += b->phnum * sizeof(Elf64_Phdr); // Increase buffer size to account for program headers
 
     // Initialize the temporary section header table.
