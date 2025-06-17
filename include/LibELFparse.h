@@ -644,9 +644,9 @@ typedef struct {
 } Elf64_Rel;
 
 typedef struct {
-    Elf64_Addr  r_offset;   // Direccion donde aplicar la reubicacion
-    Elf64_Xword r_info;     // Tipo y simbolo relacionados con la reubicacion
-    Elf64_Sword r_addend;  // Valor constante adicional
+    Elf64_Addr   r_offset;   // Direccion donde aplicar la reubicacion
+    Elf64_Xword  r_info;     // Tipo y simbolo relacionados con la reubicacion
+    Elf64_Sxword r_addend;  // Valor constante adicional
 } Elf64_Rela;
 
 #include "RelocsELF/RelocsELF.h"

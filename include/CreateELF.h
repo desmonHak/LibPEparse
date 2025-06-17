@@ -1,5 +1,8 @@
 #ifndef CREATE_ELF_H
 #define CREATE_ELF_H
+
+#include "CreatePe.h"
+
 #define PAGE_SIZE 0x1000
 
 // https://stevens.netmeister.org/631/elf.html
