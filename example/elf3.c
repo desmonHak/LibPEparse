@@ -75,6 +75,40 @@ int main() {
     );
     current_file_offset = b->size; // Update current_file_offset after adding .text
 
+    /**
+     * Las entradas a la PLT, ocupan 16bytes, no creo que se pueda definir campos mas grandes
+     * y menores no permitirian que las entradas esten alineadas, asi que el linker dinamico
+     * exije este tamaño.
+     *
+     * Las entradas en 32bits para x86 no cambian demasiado:
+     * <printf@plt>:
+     *      jmp DWORD PTR [<dirección_en_GOT>]   ; 1. Salta a la dirección almacenada en la GOT
+     *      push <relocation_index>              ; 2. Apila el índice de relocalización
+     *      jmp <plt0>                           ; 3. Salta al inicio de la PLT (PLT0)
+     */
+    typedef struct plt_entry_t{
+        union {
+            uint8_t jmp_got[6];                 // jmp QWORD PTR [rip + offset_to_GOT]
+            struct {
+                uint16_t opcode_jmp_got_rip;    // opcode 0xff, 0x25 == jmp QWORD PTR
+                uint32_t offset_jmp_got;        // [rip + offset_to_GOT]
+            };
+        };
+        union {
+            uint8_t push[5];                    // push <relocation_index>
+            struct {
+                uint8_t opcode_push;            // 0x68 opcode == push
+                uint32_t offset_got;            // relocation_index
+            };
+        };
+        union {
+            uint8_t jmp_plt[5];                 // jmp <plt0>
+            struct {
+                uint8_t opcode_jmp_plt;         // opcode 0xff, 0x25 == jmp QWORD PTR
+                uint32_t offset_jmp_plt_got;    // [rip + offset_to_GOT]
+            };
+        };
+    } plt_entry_t;
 
     // Add .plt section (Procedure Linkage Table)
     // This defines the PLT0 (global entry) and PLT1 (printf specific entry).
@@ -144,10 +178,11 @@ int main() {
         b->size = current_file_offset;
     }
     // Add .got.plt section
-    // GOT[0] is for the dynamic section's address (filled later).
-    // GOT[1] is for the dynamic linker's `link_map` (filled by dynamic linker at runtime).
-    // GOT[2] is the entry for `printf` (initially points into PLT, then resolved at runtime).
-    uint64_t got_plt[3] = {0}; // Initialize all entries to 0
+    // GOT[0] Dirección de la sección .dynamic (usada internamente por el dynamic linker).
+    // GOT[1] Puntero a la estructura link_map (usada internamente por el dynamic linker)
+    // GOT[2] Puntero a la función de resolución (_dl_runtime_resolve)
+    // GOT[3] is the entry for `printf` (initially points into PLT, then resolved at runtime).
+    uint64_t got_plt[4] = {0}; // Initialize all entries to 0
 
     size_t got_plt_section_off;
     uint64_t got_plt_section_vaddr;
@@ -214,7 +249,7 @@ int main() {
         b->size = current_file_offset;
     }
     // Add .dynsym section
-    Elf64_Sym dynsym[2] = {0}; // Array for dynamic symbols
+    Elf64_Sym dynsym[3] = {0}; // Array for dynamic symbols
     // dynsym[0]: Null symbol (mandatory first entry)
     dynsym[0].st_name = 0;
     dynsym[0].st_info = ELF64_ST_INFO(STB_LOCAL, STT_NOTYPE);
@@ -224,6 +259,12 @@ int main() {
     dynsym[1].st_name = 1;
     dynsym[1].st_info = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC); // Global, Function type
     dynsym[1].st_shndx = SHN_UNDEF; // Undefined section, resolved at runtime by dynamic linker
+
+    // dynsym[2]: puts symbol
+    // st_name = 1: offset in .dynstr for "puts"
+    dynsym[2].st_name = sizeof("\0printf"); // obtenemos el offset para puts
+    dynsym[2].st_info = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC); // Global, Function type
+    dynsym[2].st_shndx = SHN_UNDEF; // Undefined section, resolved at runtime by dynamic linker
 
     size_t dynsym_section_off;
     uint64_t dynsym_section_vaddr;
@@ -249,18 +290,19 @@ int main() {
         b->size = current_file_offset;
     }
     // Add .rela.plt section
-    Elf64_Rela rela = {0}; // Single relocation entry for printf
+    Elf64_Rela rela[1] = {0}; // Single relocation entry for printf
     // r_offset: Virtual address of GOT[2] (where the resolved printf address will be stored)
-    rela.r_offset = got_plt_section_vaddr + 2 * 8;
+    rela[0].r_offset = got_plt_section_vaddr + 2 * 8;
     // r_info: Combines symbol index (1 for printf) and relocation type (R_X86_64_JUMP_SLOT)
-    rela.r_info = ELF64_R_INFO(1, R_X86_64_JUMP_SLOT);
-    rela.r_addend = 0; // No addend typically for JUMP_SLOT
+    rela[0].r_info = ELF64_R_INFO(1, R_X86_64_JUMP_SLOT);
+    rela[0].r_addend = 0; // No addend typically for JUMP_SLOT
+
 
     size_t rela_plt_section_off;
     uint64_t rela_plt_section_vaddr;
     elf_builder_add_section_ex(
         b, ".rela.plt", SHT_RELA, SHF_ALLOC, // Type, Flags (Allocatable)
-        &rela, sizeof(rela), // Data, Size
+        &rela, sizeof(rela[0]) , // Data, Size
         base_vaddr + current_file_offset, 8, // Virtual Address, Alignment
         &rela_plt_section_off, &rela_plt_section_vaddr,
         idx_dynsym, // sh_link: link to .dynsym
@@ -309,9 +351,33 @@ int main() {
     current_file_offset = b->size;
 
 
-    // Patch GOT[0] with the virtual address of the .dynamic section.
-    // This is the first entry in the GOT that the dynamic linker uses.
+    /**
+     * Entrada GOT	Contenido inicial	            ¿Quién lo actualiza?	    Ejemplo en el dump
+     * GOT[0]   	.dynamic	                    Tu código	                0x004030a0
+     * Despues de ejecutar el codigo, el linker pondra lo siguiente en la GOT[0]
+     * GOT[0]   	_dl_runtime_resolve	            Dynamic linker	            0x00000000
+     * GOT[1]   	link_map (usado por el linker)	Dynamic linker	            0x00000000
+     * GOT[2]   	PLT de printf	                Tu código (luego el linker)	0x401030
+     * GOT[3]   	PLT de puts  	                Tu código (luego el linker)
+     *
+     * PLT0 (offset 0):
+     *      - Dirección: plt_section_vaddr + 0
+     *      - Tamaño: 16 bytes (contando el padding)
+     * PLT1 (offset 16):
+     *      - Dirección: plt_section_vaddr + 16
+     *      - Tamaño: 16 bytes (en este caso, aunque puede variar según el código generado)
+     */
+
+    // pondremos la seccion .dynamic, la necesita el linker
     ((uint64_t *)(b->mem + got_plt_section_off))[0] = dynamic_section_vaddr;
+
+    /* Inicialmente apunta a la PLT, luego el dynamic linker lo actualiza:
+     * La entrada global (PLT0) ocupa 16 bytes,
+     * la entrada para printf (PLT1) empieza justo después, en el offset 16,
+     * por lo que, plt_section_vaddr + 16 es la dirección de la entrada PLT para printf.
+     */
+    ((uint64_t *)(b->mem + got_plt_section_off))[2] = plt_section_vaddr + 16 * 1;
+
 
 
     // Add .strtab section (String Table for non-dynamic symbols, e.g., `_start`)
@@ -367,9 +433,19 @@ int main() {
     // The RIP register, when calculating the relative jump, points to the instruction *after* the current one.
     // A 5-byte call instruction: `0xE8 [offset_bytes]`
     // `rip` will be `(text_section_vaddr + 12) + 5` after the call instruction executes.
-    uint64_t call_instruction_vaddr = text_section_vaddr + 14;
-    uint64_t plt1_entry_vaddr = plt_section_vaddr + 16; // Start of printf's PLT stub
-    int32_t rel32_printf_call = (int32_t)(plt1_entry_vaddr - (call_instruction_vaddr + 5));
+    uint64_t call_instruction_vaddr = text_section_vaddr + 14; // calculamos la instruccion a modificar
+    // calculamos la entrada de la PLT que resolvera el simbolo, "printf" en este caso, la cual es PLT[1]
+    uint64_t plt1_entry_vaddr = plt_section_vaddr + 16 * 1;
+
+
+    // rel32_printf_call = plt1_entry_vaddr - (call_instruction_vaddr + 5)
+    // offset            = destino          - (dirección_de_la_siguiente_instrucción)
+    // se debe calcular un desplazamiento, pues el call usado, no salta a una direccion absoluta, sino un offset
+    // especifico, para saber esto calcula cuántos bytes hay que saltar (hacia adelante o hacia atrás)
+    // desde la instrucción siguiente al call hasta la entrada PLT de printf
+    int32_t rel32_printf_call                    = (int32_t) (plt1_entry_vaddr - (call_instruction_vaddr + 5));
+
+    // parchear la instruccion call con el offset relativo a la funcion de la PLT obtenida anteriomente.
     *(int32_t *)(b->mem + text_section_off + 13) = rel32_printf_call; // Offset 13 within code[] for the 4-byte operand
 
 
@@ -402,9 +478,54 @@ int main() {
     // Relative offset = Target - RIP_after_instruction = plt_section_vaddr - (plt_section_vaddr + 32) = -32.
     *(int32_t *)(b->mem + plt_section_off + 28) = (int32_t)(plt_section_vaddr - (plt_section_vaddr + 32)); // Corrected offset and value
 
-    // GOT[0]: puntero a PLT1 para printf, para salto inicial a la rutina PLT
-    *(uint64_t *)(b->mem + got_plt_section_off + 0) = plt_section_vaddr + 16; // PLT1 = plt_section_vaddr + 16 (offset 0x10)
+    // GOT[1]: puntero a PLT1 para printf, para salto inicial a la rutina PLT
+    *(uint64_t *)(b->mem + got_plt_section_off + 8 * 3) = plt_section_vaddr + 16; // PLT1 = plt_section_vaddr + 16 (offset 0x10)
 
+
+    /**
+     *    (gdb) b _start
+     *    Breakpoint 1 at 0x401000
+     *    (gdb) r
+     *    Starting program: /mnt/f/C/simple_bytecode/lib/LibPEparse/cmake-build-debug/fixed_hello.elf
+     *
+     *    Breakpoint 1.2, 0x00007ffff7fe35c0 in _start () from /lib64/ld-linux-x86-64.so.2
+     *    (gdb) c
+     *    Continuing.
+     *    Breakpoint 1.1, 0x0000000000401000 in _start ()
+     *    (gdb) disas
+     *    Dump of assembler code for function _start:
+     *    => 0x0000000000401000 <+0>:     movabs $0x402000,%rdi
+     *       0x000000000040100a <+10>:    xor    %eax,%eax
+     *       0x000000000040100c <+12>:    call   0x401030 <printf@plt>
+     *       0x0000000000401011 <+17>:    xor    %edi,%edi
+     *       0x0000000000401013 <+19>:    mov    $0x3c,%eax
+     *       0x0000000000401018 <+24>:    syscall
+     *    End of assembler dump.
+     *
+     *
+     * ┌──(desmon0xff㉿DESKTOP-N71RAHT)-[/mnt/f/C/simple_bytecode/lib/LibPEparse/cmake-build-debug]
+     * └─$ objdump -M intel -d -j .plt fixed_hello.elf
+     *
+     * fixed_hello.elf:     file format elf64-x86-64
+     *
+     *
+     * Disassembly of section .plt:
+     *
+     * 0000000000401020 <printf@plt-0x10>:
+     *   401020:       ff 35 e2 1f 00 00       push   QWORD PTR [rip+0x1fe2]        # 403008 <printf@plt+0x1fd8>
+     *   401026:       ff 25 e4 1f 00 00       jmp    QWORD PTR [rip+0x1fe4]        # 403010 <printf@plt+0x1fe0>
+     *   40102c:       0f 1f 40 00             nop    DWORD PTR [rax+0x0]
+     *
+     * 0000000000401030 <printf@plt>:
+     *   401030:       ff 25 da 1f 00 00       jmp    QWORD PTR [rip+0x1fda]        # 403010 <printf@plt+0x1fe0>
+     *   401036:       68 00 00 00 00          push   0x0
+     *   40103b:       e9 e0 ff ff ff          jmp    401020 <_start+0x20>
+     *
+     *
+     * El "0x000000000040100c <+12>:    call   0x401030 <printf@plt>" del dbg, debe apuntar correctamente a la entrada
+     * de la PLT que resuelve su simbolo "0000000000401030 <printf@plt>:" (en objdump)
+     *
+     */
 
     // --- Setup Program Headers ---
     // These directly modify the memory buffer where `b->phdr` points, which is right after the ELF header.

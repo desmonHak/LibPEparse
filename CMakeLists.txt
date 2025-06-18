@@ -183,3 +183,18 @@ add_executable(elf3
         src/UtilsC.c
         src/CreateELF.c
         example/elf3.c)
+
+add_executable(elf4
+        include/CreatePe.h
+        include/LibCOFFparse.h
+        include/LibELFparse.h
+        include/LibPEparse.h
+        include/UtilsC.h
+        include/CreateELF.h
+        src/CreatePe.c
+        src/LibCOFFparse.c
+        src/LibELFparse.c
+        src/LibPEparse.c
+        src/UtilsC.c
+        src/CreateELF.c
+        example/elf4.c)

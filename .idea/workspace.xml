@@ -18,6 +18,7 @@
   <component name="CMakeRunConfigurationManager">
     <generated>
       <config projectName="LibPEparse" targetName="main" />
+      <config projectName="LibPEparse" targetName="elf4" />
       <config projectName="LibPEparse" targetName="elf1" />
       <config projectName="LibPEparse" targetName="elf3" />
       <config projectName="LibPEparse" targetName="elf2" />
@@ -36,11 +37,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="8e9565b1-ca0c-4906-805c-59a53e0d29f0" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/example/elf4.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/example/elf3.c" beforeDir="false" afterPath="$PROJECT_DIR$/example/elf3.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/example/elf4.c" beforeDir="false" afterPath="$PROJECT_DIR$/example/elf4.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/include/CreateELF.h" beforeDir="false" afterPath="$PROJECT_DIR$/include/CreateELF.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/LibELFparse.h" beforeDir="false" afterPath="$PROJECT_DIR$/include/LibELFparse.h" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,6 +68,7 @@
   &quot;keyToString&quot;: {
     &quot;CMake Application.elf2.executor&quot;: &quot;Run&quot;,
     &quot;CMake Application.elf3.executor&quot;: &quot;Run&quot;,
+    &quot;CMake Application.elf4.executor&quot;: &quot;Run&quot;,
     &quot;Makefile Target.generate_lib.executor&quot;: &quot;Run&quot;,
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.RadMigrateCodeStyle&quot;: &quot;true&quot;,
@@ -87,7 +89,12 @@
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
-  <component name="RunManager" selected="CMake Application.elf2">
+  <component name="RunManager" selected="CMake Application.elf3">
+    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+      <method v="2">
+        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
+      </method>
+    </configuration>
     <configuration name="code1" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="LibPEparse" TARGET_NAME="code1" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="LibPEparse" RUN_TARGET_NAME="code1">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
@@ -128,6 +135,11 @@
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
+    <configuration name="elf4" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="LibPEparse" TARGET_NAME="elf4" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="LibPEparse" RUN_TARGET_NAME="elf4">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
     <configuration name="main" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="LibPEparse" TARGET_NAME="main" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="LibPEparse" RUN_TARGET_NAME="main">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
@@ -148,6 +160,7 @@
       <item itemvalue="CMake Application.elf1" />
       <item itemvalue="CMake Application.elf2" />
       <item itemvalue="CMake Application.elf3" />
+      <item itemvalue="CMake Application.elf4" />
       <item itemvalue="CMake Application.main" />
       <item itemvalue="Makefile Target.generate_lib" />
     </list>
@@ -166,7 +179,9 @@
       <updated>1748823629801</updated>
       <workItem from="1748823631355" duration="135000" />
       <workItem from="1750024641611" duration="16174000" />
-      <workItem from="1750181925589" duration="997000" />
+      <workItem from="1750181925589" duration="3549000" />
+      <workItem from="1750207805262" duration="1282000" />
+      <workItem from="1750225729191" duration="17005000" />
     </task>
     <servers />
   </component>

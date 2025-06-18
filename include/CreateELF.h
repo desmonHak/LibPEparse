@@ -139,6 +139,19 @@
 #define R_X86_64_JUMP_SLOT 7
 #define R_X86_64_RELATIVE 8
 
+/**
+ * Parchea instrucciones como "jmp QWORD PTR [rip+GOT_printf_offset]", donde los primeros
+ * 2 bytes indica la instruccion y los siguientes el desplazamiento que sumar:
+ *      ff 25 00 00 00 00  == jmp QWORD PTR [ rip + 0 ]
+ *
+ * @param mem El puntero al buffer de memoria donde está el código.
+ * @param plt_off El offset dentro del buffer donde empieza la instrucción.
+ * @param rip La dirección de la siguiente instrucción (valor de RIP al ejecutar la instrucción actual).
+ * @param target La dirección de memoria a la que queremos saltar o acceder.
+ */
+#define PATCH_PLT_OFFSET(mem, plt_off, rip, target) \
+    *(int32_t *)((mem) + (plt_off) + 2) = (int32_t)((target) - (rip))
+
 typedef struct {
     uint8_t *mem;        // Main buffer for the ELF image
     size_t capacity;     // Total capacity of the buffer
