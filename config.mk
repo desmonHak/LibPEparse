@@ -33,5 +33,7 @@ ARR_FLAGS     = -rc
 CFLAGS_EXAMPLES 		= $(CFLAGS) $(LINKER_FLAGS)
 CFLAGS_EXAMPLES_DEBUG 	= $(CFLAGS_DEBUG) $(LINKER_FLAGS)
 
-OBJECTS 	  = LibPEparse.o LibCOFFparse.o CreatePe.o
-OBJECTS_DEBUG = LibPEparse_debug.o LibCOFFparse_debug.o CreatePe_debug.o
+OBJECTS         = LibPEparse.o LibCOFFparse.o CreatePe.o CreateELF.o \
+					LibELFparse.o UtilsC.o
+OBJECTS_DEBUG   = LibPEparse_debug.o LibCOFFparse_debug.o CreatePe_debug.o \
+					CreateELF_debug.o LibELFparse_debug.o UtilsC_debug.o

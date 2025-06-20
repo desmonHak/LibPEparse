@@ -1,6 +1,15 @@
 #ifndef LIB_ELF_PARSE_H
 #define LIB_ELF_PARSE_H
 
+#include <ctype.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <inttypes.h>
+#include <stdatomic.h>
+
 // para parametros que no se usaran bajo ciertas circustancias
 #ifndef UNUSED_ARG
 #define UNUSED_ARG(x) (void)(x)

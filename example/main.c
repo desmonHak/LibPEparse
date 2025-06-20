@@ -21,12 +21,12 @@ int main(int argc, char **argv) {
     // Añadir una nueva seccion
     char newSectionData[] = "Esto es una nueva seccion";
     _DWORD newSectionSize = sizeof(newSectionData);
-    AddNewSection64(file, ".newsec1", newSectionSize, newSectionData, SECTION_TYPE_CODE);
+    AddNewSection64(file, ".newsec1", newSectionSize, /*newSectionData,*/ SECTION_TYPE_CODE);
 
     // Escribir el archivo PE modificado
     WriteModifiedPEFile64(file, "nuevo_archivo.exe", ".newsec1", newSectionSize);
 
-    AddNewSection64(file, ".newsec2", newSectionSize, newSectionData, SECTION_TYPE_CODE);
+    AddNewSection64(file, ".newsec2", newSectionSize, /*newSectionData,*/ SECTION_TYPE_CODE);
     WriteModifiedPEFile64(file, "nuevo_archivo.exe", ".newsec2", newSectionSize);
     PE64FILE_PrintInfo64(file);
     printf("Liberando datos asociados al archivo\n");

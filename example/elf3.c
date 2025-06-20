@@ -20,6 +20,8 @@ int main() {
         0x48, 0xbf, 0,0,0,0, 0,0,0,0, // mov rdi, <address_of_string> (10 bytes)
         0x31, 0xc0,                   // xor eax, eax (2 bytes, for printf's %eax = 0)
         0xe8, 0,0,0,0,                // call printf@plt (5 bytes)
+        0x48, 0xbf, 0,0,0,0, 0,0,0,0, // mov rdi, <address_of_string> (10 bytes)
+        0xe8, 0,0,0,0,                // call puts@plt (5 bytes)
         0x31, 0xff,                   // xor edi, edi (2 bytes, for sys_exit's %edi = 0 status)
         0xb8, 0x3c, 0x00, 0x00, 0x00, // mov eax, 60 (sys_exit) (5 bytes)
         0x0f, 0x05                    // syscall (2 bytes)
@@ -29,7 +31,7 @@ int main() {
     const char interp[] = "/lib64/ld-linux-x86-64.so.2"; // Dynamic linker path
     // Dynamic string table: null byte, "printf", null byte, "libc.so.6", null byte
     // The null bytes are crucial string terminators.
-    const char dynstr[] = "\0printf\0libc.so.6\0";
+    const char dynstr[] = "\0printf\0puts\0libc.so.6\0";
 
     size_t code_size = sizeof(code);
     size_t data_size = sizeof(hello_str); // Includes null terminator
@@ -133,6 +135,11 @@ int main() {
         0x68, 0x00,0x00,0x00,0x00,
         // jmp .plt[0]
         // Jumps back to PLT0 to initiate symbol resolution.
+        0xe9, 0,0,0,0,
+
+        // PLT2 (puts@plt, Offset 32 in .plt section)
+        0xff, 0x25, 0,0,0,0,
+        0x68, 0x01,0x00,0x00,0x00, // pushq 1   Indice de relocalización (1 para puts)
         0xe9, 0,0,0,0
     };
 
@@ -182,7 +189,8 @@ int main() {
     // GOT[1] Puntero a la estructura link_map (usada internamente por el dynamic linker)
     // GOT[2] Puntero a la función de resolución (_dl_runtime_resolve)
     // GOT[3] is the entry for `printf` (initially points into PLT, then resolved at runtime).
-    uint64_t got_plt[4] = {0}; // Initialize all entries to 0
+    // GOT[4] is the entry for `puts`
+    uint64_t got_plt[5] = {0}; // Initialize all entries to 0
 
     size_t got_plt_section_off;
     uint64_t got_plt_section_vaddr;
@@ -198,7 +206,8 @@ int main() {
     // Patch the string address into the `mov rdi` instruction in the code.
     // The instruction `mov rdi, QWORD imm64` is 10 bytes long.
     // The immediate starts at offset 2 within the instruction.
-    *(uint64_t *)(b->mem + text_section_off + 2) = data_section_vaddr;
+    *(uint64_t *)(b->mem + text_section_off + 2)  = data_section_vaddr;
+    *(uint64_t *)(b->mem + text_section_off + 19) = data_section_vaddr;
 
 
     // Add .interp section (Program interpreter path)
@@ -270,7 +279,7 @@ int main() {
     uint64_t dynsym_section_vaddr;
     size_t idx_dynsym = elf_builder_add_section_ex(
         b, ".dynsym", SHT_DYNSYM, SHF_ALLOC, // Type, Flags (Allocatable)
-        dynsym, sizeof(dynsym), // Data, Size
+        dynsym, sizeof(dynsym[0]) * 3 , // Data, Size
         base_vaddr + current_file_offset, 8, // Virtual Address, Alignment
         &dynsym_section_off, &dynsym_section_vaddr,
         idx_dynstr, // sh_link: link to .dynstr (for names)
@@ -290,19 +299,24 @@ int main() {
         b->size = current_file_offset;
     }
     // Add .rela.plt section
-    Elf64_Rela rela[1] = {0}; // Single relocation entry for printf
-    // r_offset: Virtual address of GOT[2] (where the resolved printf address will be stored)
-    rela[0].r_offset = got_plt_section_vaddr + 2 * 8;
+    Elf64_Rela rela[2] = {0}; // Single relocation entry for printf
+    // r_offset: Virtual address of GOT[3] (where the resolved printf address will be stored)
+    rela[0].r_offset = got_plt_section_vaddr + 3 * 8;
     // r_info: Combines symbol index (1 for printf) and relocation type (R_X86_64_JUMP_SLOT)
     rela[0].r_info = ELF64_R_INFO(1, R_X86_64_JUMP_SLOT);
     rela[0].r_addend = 0; // No addend typically for JUMP_SLOT
 
+    // r_offset: Virtual address of GOT[4] (where the resolved printf address will be stored)
+    rela[1].r_offset = got_plt_section_vaddr + 4 * 8;
+    // r_info: Combines symbol index (2 for puts) and relocation type (R_X86_64_JUMP_SLOT)
+    rela[1].r_info = ELF64_R_INFO(2, R_X86_64_JUMP_SLOT);
+    rela[1].r_addend = 0; // No addend typically for JUMP_SLOT
 
     size_t rela_plt_section_off;
     uint64_t rela_plt_section_vaddr;
     elf_builder_add_section_ex(
         b, ".rela.plt", SHT_RELA, SHF_ALLOC, // Type, Flags (Allocatable)
-        &rela, sizeof(rela[0]) , // Data, Size
+        &rela, sizeof(rela[0]) * 2, // Data, Size
         base_vaddr + current_file_offset, 8, // Virtual Address, Alignment
         &rela_plt_section_off, &rela_plt_section_vaddr,
         idx_dynsym, // sh_link: link to .dynsym
@@ -323,7 +337,7 @@ int main() {
     // Add .dynamic section
     // This table provides information to the dynamic linker.
     Elf64_Dyn dynamic[] = {
-        {DT_NEEDED,   {.d_val = 8}},                  // Offset of "libc.so.6" in .dynstr
+        {DT_NEEDED,   {.d_val = sizeof("\0print\0puts\0")}},                  // Offset of "libc.so.6" in .dynstr
         {DT_PLTGOT,   {.d_ptr = got_plt_section_vaddr}}, // Virtual Address of .got.plt
         {DT_STRTAB,   {.d_ptr = dynstr_section_vaddr}},  // Virtual Address of .dynstr
         {DT_SYMTAB,   {.d_ptr = dynsym_section_vaddr}},  // Virtual Address of .dynsym
@@ -376,8 +390,33 @@ int main() {
      * la entrada para printf (PLT1) empieza justo después, en el offset 16,
      * por lo que, plt_section_vaddr + 16 es la dirección de la entrada PLT para printf.
      */
-    ((uint64_t *)(b->mem + got_plt_section_off))[2] = plt_section_vaddr + 16 * 1;
+    printf("plt_section_vaddr + 16 * 1 == %x\n", plt_section_vaddr + 16 * 1);
+    ((uint64_t *)(b->mem + got_plt_section_off))[3] = plt_section_vaddr + 16 * 1 + 6;
 
+
+    /**
+     *   0000000000401040 <printf@plt>:
+     *      401040:       ff 25 d2 1f 00 00       jmp    *0x1fd2(%rip)        # 403018 <puts@plt+0x1fc8>
+     *      401046:       68 00 00 00 00          push   $0x0
+     *      40104b:       e9 e0 ff ff ff          jmp    401030 <_start+0x30>
+     *      
+     *  Como la GOT apuntara a su PLT(PLT[1] para printf):
+     *          GOT[3](0x403018) = PLT[1](0x401040)
+     *  Debemos evitar que nuestra entrada a la got, apunte al principio de la entrada de la PLT, esto es asi
+     *  por que, la primera instruccion de la PLT, es un "jmp    *0x1fd2(%rip) #403018"(GOT[3] == 0x403018),
+     *  si al saltar a la GOT la GOT vuelve a apuntar a este salto, se genera un bucle infinito, por eso
+     *  sumamos 6 al calculo, ya que la instruccion de salto ocupa 6 bytes.
+     *  Siendo el calculo el siguiente
+     *  base_address_PLT_section + 16(tamaño de cada entrada de la PLT) * index_PLT(indice de la entrada a la PLT) +
+     *      6 (bytes que ocupa la instruccion jmp).
+     */
+    printf("plt_section_vaddr + 16 * 1 == %x\n", plt_section_vaddr + 16 * 2);
+    ((uint64_t *)(b->mem + got_plt_section_off))[4] = plt_section_vaddr + 16 * 2 + 6;
+
+    printf("b->mem + got_plt_section_off == %x\n", base_vaddr + got_plt_section_off);
+
+    printf("b->mem + [[3]] == %x\n", (((void *)&((uint64_t *)(b->mem + got_plt_section_off))[3]) - (void *)(b->mem + got_plt_section_off)));
+    printf("b->mem + [[4]] == %x\n", (((void *)&((uint64_t *)(b->mem + got_plt_section_off))[4]) - (void *)(b->mem + got_plt_section_off)));
 
 
     // Add .strtab section (String Table for non-dynamic symbols, e.g., `_start`)
@@ -433,10 +472,9 @@ int main() {
     // The RIP register, when calculating the relative jump, points to the instruction *after* the current one.
     // A 5-byte call instruction: `0xE8 [offset_bytes]`
     // `rip` will be `(text_section_vaddr + 12) + 5` after the call instruction executes.
-    uint64_t call_instruction_vaddr = text_section_vaddr + 14; // calculamos la instruccion a modificar
+    uint64_t call_instruction_vaddr = text_section_vaddr + 12; // calculamos la instruccion a modificar
     // calculamos la entrada de la PLT que resolvera el simbolo, "printf" en este caso, la cual es PLT[1]
     uint64_t plt1_entry_vaddr = plt_section_vaddr + 16 * 1;
-
 
     // rel32_printf_call = plt1_entry_vaddr - (call_instruction_vaddr + 5)
     // offset            = destino          - (dirección_de_la_siguiente_instrucción)
@@ -453,17 +491,17 @@ int main() {
     // PLT0: `push QWORD PTR [rip+X]` (points to GOT+8, i.e., GOT[1])
     // Instruction `0xff, 0x35` is at `plt_section_off + 0`. It's 6 bytes long.
     // `RIP` will be `plt_section_vaddr + 6`. Target is `got_plt_section_vaddr + 8`.
-    *(int32_t *)(b->mem + plt_section_off + 2) = (int32_t)((got_plt_section_vaddr + 8) - (plt_section_vaddr + 6));
+    *(int32_t *)(b->mem + plt_section_off + 2) = (int32_t)((got_plt_section_vaddr + 8 * 1) - (plt_section_vaddr + 6));
 
     // PLT0: `jmp  QWORD PTR [rip+Y]` (points to GOT+16, i.e., GOT[2])
     // Instruction `0xff, 0x25` is at `plt_section_off + 6`. It's 6 bytes long.
     // `RIP` will be `plt_section_vaddr + 6 + 6 = plt_section_vaddr + 12`. Target is `got_plt_section_vaddr + 16`.
-    *(int32_t *)(b->mem + plt_section_off + 8) = (int32_t)((got_plt_section_vaddr + 16) - (plt_section_vaddr + 12));
+    *(int32_t *)(b->mem + plt_section_off + 8) = (int32_t)((got_plt_section_vaddr + 8 * 2) - (plt_section_vaddr + 12));
 
-    // PLT1 (printf stub): `jmp QWORD PTR [rip+Z]` (points to GOT+16, i.e., GOT[2], for printf's resolved address)
-    // Instruction `0xff, 0x25` is at `plt_section_off + 16`. It's 6 bytes long.
-    // `RIP` will be `plt_section_vaddr + 16 + 6 = plt_section_vaddr + 22`. Target is `got_plt_section_vaddr + 16`.
-    *(int32_t *)(b->mem + plt_section_off + 18) = (int32_t)((got_plt_section_vaddr + 16) - (plt_section_vaddr + 22));
+    // PLT1 (printf stub): `jmp QWORD PTR [rip+Z]` (points to GOT+24, i.e., GOT[3], for printf's resolved address)
+    // Instruction `0xff, 0x25` is at `plt_section_off + 24`. It's 6 bytes long.
+    // `RIP` will be `plt_section_vaddr + 24 + 6 = plt_section_vaddr + 22`. Target is `got_plt_section_vaddr + 16`.
+    *(int32_t *)(b->mem + plt_section_off + 18) = (int32_t)((got_plt_section_vaddr + 8*3) - (plt_section_vaddr + 22));
 
     // PLT1 (printf stub): `pushq <relocation index>`
     // The relocation index for `printf` in our `.rela.plt` section is 0 (as it's the first and only entry).
@@ -478,8 +516,20 @@ int main() {
     // Relative offset = Target - RIP_after_instruction = plt_section_vaddr - (plt_section_vaddr + 32) = -32.
     *(int32_t *)(b->mem + plt_section_off + 28) = (int32_t)(plt_section_vaddr - (plt_section_vaddr + 32)); // Corrected offset and value
 
-    // GOT[1]: puntero a PLT1 para printf, para salto inicial a la rutina PLT
-    *(uint64_t *)(b->mem + got_plt_section_off + 8 * 3) = plt_section_vaddr + 16; // PLT1 = plt_section_vaddr + 16 (offset 0x10)
+
+
+    uint64_t call_instruction_vaddr_puts = text_section_vaddr + 24; // calculamos la instruccion a modificar
+    uint64_t plt2_entry_vaddr_puts = plt_section_vaddr + 16 * 2; // PLT[2]
+    int32_t rel32_puts_call  = (int32_t) (plt2_entry_vaddr_puts - (call_instruction_vaddr_puts + 8));
+
+    *(int32_t *)(b->mem + text_section_off + 28) = rel32_puts_call ;
+
+    *(int32_t *)(b->mem + plt_section_off + 32 + 2) = (int32_t)(
+        (got_plt_section_vaddr + 4 * 8) - (plt_section_vaddr + 32 + 6)
+    );
+
+    *(int32_t *)(b->mem + plt_section_off + 16 * 3 -4) = (int32_t)(plt_section_vaddr - (plt_section_vaddr + 16 * 3)); // Corrected offset and value
+
 
 
     /**

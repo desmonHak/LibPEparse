@@ -4,16 +4,10 @@
 
 #include "LibELFparse.h"
 
-#include <inttypes.h>
-#include <stdatomic.h>
 
 #include "UtilsC.h"
 
-#include <stdio.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
+
 
 /**
  * Helper para imprimir bytes en hexadecimal
