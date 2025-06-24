@@ -77,40 +77,7 @@ int main() {
     );
     current_file_offset = b->size; // Update current_file_offset after adding .text
 
-    /**
-     * Las entradas a la PLT, ocupan 16bytes, no creo que se pueda definir campos mas grandes
-     * y menores no permitirian que las entradas esten alineadas, asi que el linker dinamico
-     * exije este tamaño.
-     *
-     * Las entradas en 32bits para x86 no cambian demasiado:
-     * <printf@plt>:
-     *      jmp DWORD PTR [<dirección_en_GOT>]   ; 1. Salta a la dirección almacenada en la GOT
-     *      push <relocation_index>              ; 2. Apila el índice de relocalización
-     *      jmp <plt0>                           ; 3. Salta al inicio de la PLT (PLT0)
-     */
-    typedef struct plt_entry_t{
-        union {
-            uint8_t jmp_got[6];                 // jmp QWORD PTR [rip + offset_to_GOT]
-            struct {
-                uint16_t opcode_jmp_got_rip;    // opcode 0xff, 0x25 == jmp QWORD PTR
-                uint32_t offset_jmp_got;        // [rip + offset_to_GOT]
-            };
-        };
-        union {
-            uint8_t push[5];                    // push <relocation_index>
-            struct {
-                uint8_t opcode_push;            // 0x68 opcode == push
-                uint32_t offset_got;            // relocation_index
-            };
-        };
-        union {
-            uint8_t jmp_plt[5];                 // jmp <plt0>
-            struct {
-                uint8_t opcode_jmp_plt;         // opcode 0xff, 0x25 == jmp QWORD PTR
-                uint32_t offset_jmp_plt_got;    // [rip + offset_to_GOT]
-            };
-        };
-    } plt_entry_t;
+
 
     // Add .plt section (Procedure Linkage Table)
     // This defines the PLT0 (global entry) and PLT1 (printf specific entry).

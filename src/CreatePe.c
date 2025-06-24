@@ -123,13 +123,13 @@ void addBssSection(PE64FILE_struct* pe, const char* name, _DWORD size) {
 _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA, _DWORD* outSize) {
     // 1. Tamaño de la Import Directory Table (una descriptor por libreria + uno nulo)
     _DWORD sizeImportDir = (numLibs + 1) * sizeof(___IMAGE_IMPORT_DESCRIPTOR);
-    
+
     // 2. Para cada libreria se reservará ILT e IAT:
     _DWORD sizeILT_IAT = 0;
     for (int i = 0; i < numLibs; i++) {
         sizeILT_IAT += (libs[i].numFunctions + 1) * sizeof(_QWORD) * 2; // ILT + IAT
     }
-    
+
     // 3. Para cada funcion, se necesita espacio para Hint/Name (WORD + cadena + terminador)
     _DWORD sizeHintName = 0;
     for (int i = 0; i < numLibs; i++) {
@@ -137,17 +137,17 @@ _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA,
             sizeHintName += sizeof(_WORD) + (_DWORD)strlen(libs[i].functions[j]) + 1;
         }
     }
-    
+
     // 4. Para cada libreria, reservar espacio para el nombre de la DLL (cadena + terminador)
     _DWORD sizeDllNames = 0;
     for (int i = 0; i < numLibs; i++) {
         sizeDllNames += (_DWORD)strlen(libs[i].dllName) + 1;
     }
-    
+
     // Tamaño total del buffer
     _DWORD totalSize = sizeImportDir + sizeILT_IAT + sizeHintName + sizeDllNames;
     _BYTE* buffer = calloc(1, totalSize);
-    if (!buffer) 
+    if (!buffer)
         return NULL;
 
     // Reservamos áreas consecutivas:
@@ -159,7 +159,7 @@ _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA,
     _DWORD iltIatOffset = importDirOffset + sizeImportDir;
     _DWORD hintNameOffset = iltIatOffset + sizeILT_IAT;
     _DWORD dllNameOffset = hintNameOffset + sizeHintName;
-    
+
     // Construir Import Directory Table
     ___IMAGE_IMPORT_DESCRIPTOR* importDir = (___IMAGE_IMPORT_DESCRIPTOR*)(buffer + importDirOffset);
     // Variable para ir avanzando en la region ILT/IAT
@@ -168,24 +168,24 @@ _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA,
         int numFuncs = libs[i].numFunctions;
         _DWORD thisILT = currentILT_IAT;
         _DWORD thisIAT = currentILT_IAT + (numFuncs + 1) * sizeof(_QWORD);
-        
+
         // Configurar descriptor para la libreria i
         importDir[i].DUMMYUNIONNAME__.OriginalFirstThunk = idataRVA + thisILT;
         importDir[i].TimeDateStamp = 0;
         importDir[i].ForwarderChain = 0;
         importDir[i].Name = idataRVA + dllNameOffset; // Ubicacion del nombre de la DLL
         importDir[i].FirstThunk = idataRVA + thisIAT;
-        
+
         // Llenar ILT e IAT para esta libreria
         _QWORD* iltArray = (_QWORD*)(buffer + thisILT);
         _QWORD* iatArray = (_QWORD*)(buffer + thisIAT);
         for (int j = 0; j < numFuncs; j++) {
             // En cada entrada ILT/IAT se almacena el RVA a la entrada Hint/Name para la funcion
-            // Nota: Si se desea que apunte directamente al nombre 
+            // Nota: Si se desea que apunte directamente al nombre
             // (omitiendo el WORD hint), se podria sumar sizeof(WORD)
             iltArray[j] = idataRVA + hintNameOffset;
             iatArray[j] = idataRVA + hintNameOffset;
-            
+
             // Escribir Hint/Name: WORD (hint, 0) + nombre de la funcion
             _WORD hint = 0;
             memcpy(buffer + hintNameOffset, &hint, sizeof(_WORD));
@@ -196,19 +196,107 @@ _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA,
         // Terminador de la ILT e IAT
         iltArray[numFuncs] = 0;
         iatArray[numFuncs] = 0;
-        
+
         // Actualizar currentILT_IAT para la siguiente libreria:
         currentILT_IAT += (numFuncs + 1) * sizeof(_QWORD) * 2;
-        
+
         // Escribir el nombre de la DLL
         strcpy((char*)(buffer + dllNameOffset), libs[i].dllName);
         dllNameOffset += (_DWORD)strlen(libs[i].dllName) + 1;
     }
     // Descriptor nulo final de la Import Directory Table
     memset(&importDir[numLibs], 0, sizeof(___IMAGE_IMPORT_DESCRIPTOR));
-    
-    if (outSize) 
+
+    if (outSize)
         *outSize = totalSize;
+    return buffer;
+}
+
+
+// Construye .idata y llena offsets de cada función importada
+// - libs: array de ImportLibrary
+// - numLibs: cantidad de librerías
+// - idataRVA: RVA base de .idata
+// - outSize: salida, tamaño total de .idata
+// - outOffsets: salida, arreglo de ImportOffsetEntry* (debes liberar luego)
+// - outNumOffsets: salida, cantidad de funciones importadas (tamaño del arreglo)
+_BYTE* buildMultiIdataSectionWithOffsets(
+    ImportLibrary* libs, int numLibs, _DWORD idataRVA, _DWORD* outSize,
+    ImportOffsetEntry** outOffsets, int* outNumOffsets)
+{
+    // 1. Calcular tamaños
+    _DWORD sizeImportDir = (numLibs + 1) * sizeof(___IMAGE_IMPORT_DESCRIPTOR);
+    _DWORD sizeILT_IAT = 0;
+    int totalFuncs = 0;
+    for (int i = 0; i < numLibs; i++) {
+        sizeILT_IAT += (libs[i].numFunctions + 1) * sizeof(_QWORD) * 2;
+        totalFuncs += libs[i].numFunctions;
+    }
+    _DWORD sizeHintName = 0;
+    for (int i = 0; i < numLibs; i++)
+        for (int j = 0; j < libs[i].numFunctions; j++)
+            sizeHintName += sizeof(_WORD) + (_DWORD)strlen(libs[i].functions[j]) + 1;
+    _DWORD sizeDllNames = 0;
+    for (int i = 0; i < numLibs; i++)
+        sizeDllNames += (_DWORD)strlen(libs[i].dllName) + 1;
+    _DWORD totalSize = sizeImportDir + sizeILT_IAT + sizeHintName + sizeDllNames;
+    _BYTE* buffer = calloc(1, totalSize);
+    if (!buffer) return NULL;
+
+    // 2. Reservar offsets de cada área
+    _DWORD importDirOffset = 0;
+    _DWORD iltIatOffset = importDirOffset + sizeImportDir;
+    _DWORD hintNameOffset = iltIatOffset + sizeILT_IAT;
+    _DWORD dllNameOffset = hintNameOffset + sizeHintName;
+
+    // 3. Prepara arreglo de offsets
+    ImportOffsetEntry* offsets = malloc(totalFuncs * sizeof(ImportOffsetEntry));
+    int offsetIdx = 0;
+
+    // 4. Construir Import Directory Table
+    ___IMAGE_IMPORT_DESCRIPTOR* importDir = (___IMAGE_IMPORT_DESCRIPTOR*)(buffer + importDirOffset);
+    _DWORD currentILT_IAT = iltIatOffset;
+    for (int i = 0; i < numLibs; i++) {
+        int numFuncs = libs[i].numFunctions;
+        _DWORD thisILT = currentILT_IAT;
+        _DWORD thisIAT = currentILT_IAT + (numFuncs + 1) * sizeof(_QWORD);
+
+        importDir[i].DUMMYUNIONNAME__.OriginalFirstThunk = idataRVA + thisILT;
+        importDir[i].TimeDateStamp = 0;
+        importDir[i].ForwarderChain = 0;
+        importDir[i].Name = idataRVA + dllNameOffset;
+        importDir[i].FirstThunk = idataRVA + thisIAT;
+
+        _QWORD* iltArray = (_QWORD*)(buffer + thisILT);
+        _QWORD* iatArray = (_QWORD*)(buffer + thisIAT);
+        for (int j = 0; j < numFuncs; j++) {
+            iltArray[j] = idataRVA + hintNameOffset;
+            iatArray[j] = idataRVA + hintNameOffset;
+
+            // Guardar offset relativo al inicio de la IAT
+            offsets[offsetIdx].dllName = libs[i].dllName;
+            offsets[offsetIdx].functionName = libs[i].functions[j];
+            offsets[offsetIdx].offset = (thisIAT + j * sizeof(_QWORD)) - iltIatOffset + 4/*¿+4?*/;
+            offsetIdx++;
+
+            // Escribir Hint/Name
+            _WORD hint = 0;
+            memcpy(buffer + hintNameOffset, &hint, sizeof(_WORD));
+            hintNameOffset += sizeof(_WORD);
+            strcpy((char*)(buffer + hintNameOffset), libs[i].functions[j]);
+            hintNameOffset += (_DWORD)strlen(libs[i].functions[j]) + 1;
+        }
+        iltArray[numFuncs] = 0;
+        iatArray[numFuncs] = 0;
+        currentILT_IAT += (numFuncs + 1) * sizeof(_QWORD) * 2;
+
+        strcpy((char*)(buffer + dllNameOffset), libs[i].dllName);
+        dllNameOffset += (_DWORD)strlen(libs[i].dllName) + 1;
+    }
+    memset(&importDir[numLibs], 0, sizeof(___IMAGE_IMPORT_DESCRIPTOR));
+    if (outSize) *outSize = totalSize;
+    if (outOffsets) *outOffsets = offsets;
+    if (outNumOffsets) *outNumOffsets = totalFuncs;
     return buffer;
 }
 
@@ -269,27 +357,36 @@ _BYTE* buildIdataSection(const char* funcName, const char* dllName, _DWORD idata
 int32_t calcularDesplazamientoCall(uint64_t direccionInstruccion, uint64_t direccionDestino) {
     return (int32_t)(direccionDestino - direccionInstruccion);
 }
-// Funcion para corregir todas las instrucciones 'call' en una seccion de codigo
-void corregirDesplazamientosCall(
-    uint8_t* codigo, size_t tamanoCodigo, 
-    uint64_t baseVirtualSeccion, uint64_t direccionIAT, FunctionOffset* funcOffsets, int numFunciones) {
-    int callIndex = 0;
-    for (size_t i = 0; i < tamanoCodigo - 5; i++) {
-        // Buscar la instruccion 'call' (opcode 0xFF 0x15)
-        if (codigo[i] == 0xFF && codigo[i+1] == 0x15) {
-            if (callIndex < numFunciones) {
-                // Direccion virtual de la instruccion siguiente al 'call'
-                uint64_t direccionInstruccionSiguiente = baseVirtualSeccion + i + 6;
-                // Calcular el desplazamiento, incluyendo el offset de la funcion en la IAT
-                int32_t desplazamiento = calcularDesplazamientoCall(
-                    direccionInstruccionSiguiente, direccionIAT + funcOffsets[callIndex].offset);
-                // Escribir el desplazamiento en el lugar correspondiente
-                memcpy(&codigo[i + 2], &desplazamiento, sizeof(int32_t));
-                callIndex++;
-            }
+
+
+// Parchea instrucciones en los offsets especificados por offset_code
+// - codigo: buffer de código a parchear
+// - tamanoCodigo: tamaño del buffer de código
+// - baseVirtualSeccion: dirección virtual base de la sección de código
+// - direccionIAT: dirección virtual base de la IAT
+// - funcOffsets: arreglo de funciones a parchear (con offset_code y offset_iat)
+// - numFunciones: cantidad de funciones a parchear
+void parchearDesplazamientosPorOffset(
+    uint8_t* codigo, size_t tamanoCodigo,
+    uint64_t baseVirtualSeccion, uint64_t direccionIAT,
+    FunctionOffset* funcOffsets, int numFunciones)
+{
+    for (int i = 0; i < numFunciones; i++) {
+        uint32_t off = funcOffsets[i].offset_code;
+        if (off + 6 > tamanoCodigo) {
+            printf("Offset fuera de rango para %s\n", funcOffsets[i].name);
+            continue;
         }
+        // Dirección virtual de la instrucción siguiente (para RIP-relative)
+        uint64_t direccionInstruccionSiguiente = baseVirtualSeccion + off + 6;
+        // Calcula el desplazamiento a la entrada de la IAT de la función
+        int32_t desplazamiento = calcularDesplazamientoCall(
+            direccionInstruccionSiguiente, direccionIAT + funcOffsets[i].offset_iat);
+        // Escribe el desplazamiento en el código (en offset + 2)
+        memcpy(&codigo[off + 2], &desplazamiento, sizeof(int32_t));
     }
 }
+
 
 
 

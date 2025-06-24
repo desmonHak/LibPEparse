@@ -8,15 +8,15 @@ int main() {
 
     // 1. Agregar seccion .text con codigo inicial
     _BYTE textCode[] = {
-        0x48, 0x83, 0xEC, 0x28,                     // sub rsp, 40h
-        0x48, 0x33, 0xC9,                           // xor rcx, rcx
-        0x48, 0x8D, 0x15, 0x00, 0x00, 0x00, 0x00,   // lea rdx, [rip + offset_to_message]
-        0x4C, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00,   // lea r8, [rip + offset_to_caption]
-        0x4D, 0x33, 0xC9,                           // xor r9, r9
-        0xFF, 0x15, 0x00, 0x00, 0x00, 0x00,         // call [RIP+disp32] (MessageBoxA)
-        0x48, 0x33, 0xC9,                           // xor rcx, rcx
-        0xFF, 0x15, 0x00, 0x00, 0x00, 0x00,         // call [RIP+disp32] (ExitProcess)
-        0xEB, 0xFE                                  // jmp $
+        /*00*/ 0x48, 0x83, 0xEC, 0x28,                     // sub rsp, 40h
+        /*04*/ 0x48, 0x33, 0xC9,                           // xor rcx, rcx
+        /*07*/ 0x48, 0x8D, 0x15, 0x00, 0x00, 0x00, 0x00,   // lea rdx, [rip + offset_to_message]
+        /*14*/ 0x4C, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00,   // lea r8, [rip + offset_to_caption]
+        /*21*/ 0x4D, 0x33, 0xC9,                           // xor r9, r9
+        /*24*/ 0xFF, 0x15, 0x00, 0x00, 0x00, 0x00,         // call [RIP+disp32] (MessageBoxA)
+        /*30*/ 0x48, 0x33, 0xC9,                           // xor rcx, rcx
+        /*33*/ 0xFF, 0x15, 0x00, 0x00, 0x00, 0x00,         // call [RIP+disp32] (ExitProcess)
+        /*39*/ 0xEB, 0xFE                                  // jmp $
     };
     
     
@@ -28,6 +28,10 @@ int main() {
     const char* kernel32Funcs[] = { "ExitProcess", "WriteConsoleA" };
     const char* user32Funcs[]   = { "MessageBoxA" };
 
+    /**
+     * La región ILT/IAT para cada DLL ocupa (numFuncs + 1) * sizeof(_QWORD) * 2
+     * bytes por DLL (porque cada función tiene una entrada en ILT y otra en IAT, más un terminador).
+     */
     ImportLibrary libs[] = {
         { "KERNEL32.dll", kernel32Funcs, sizeof(kernel32Funcs) / sizeof(kernel32Funcs[0]) },
         { "USER32.dll",   user32Funcs,   sizeof(user32Funcs) / sizeof(user32Funcs[0]) }
@@ -38,7 +42,16 @@ int main() {
     // Asumiendo que la seccion .idata se ubicará en RVA = SECT_ALIGN * 2 (por ejemplo, 0x2000)
     _DWORD idataRVA = SECT_ALIGN * 2;
     _DWORD idataSize = 0;
-    _BYTE* idataBuffer = buildMultiIdataSection(libs, numLibs, idataRVA, &idataSize);
+    ImportOffsetEntry* offsets = NULL;
+    int numOffsets = 0;
+    _BYTE* idataBuffer = buildMultiIdataSectionWithOffsets(
+        libs, numLibs, idataRVA, &idataSize, &offsets, &numOffsets
+    );
+
+    // Ahora usar offsets[i].offset para cada función importada
+    for (int i = 0; i < numOffsets; i++) {
+        printf("Función %s (DLL %s) offset en IAT: %d\n", offsets[i].functionName, offsets[i].dllName, offsets[i].offset);
+    }
 
     // Agregar la seccion .idata al PE
     int idataIndex = addSection(&pe, ".idata",
@@ -61,21 +74,46 @@ int main() {
     uint64_t direccionIAT = pe.ntHeaders.OptionalHeader.DataDirectory[
         ___IMAGE_DIRECTORY_ENTRY_IAT].VirtualAddress + pe.ntHeaders.OptionalHeader.ImageBase;
 
-    FunctionOffset stack_functions_offsets[] = {
-        // 10 bytes (descriptor de KERNEL32.dll) +
-        // 10 bytes (descriptor de USER32.dll) +
-        // 8 bytes (primeros bytes de la tabla de nombres) = 28 bytes
-        {68, "MessageBoxA"},
-        {28, "ExitProcess"},
-        {36, "WriteConsoleA"}
-    };
+    //FunctionOffset stack_functions_offsets[] = {
+    //    // 10 bytes (descriptor de KERNEL32.dll) +
+    //    // 10 bytes (descriptor de USER32.dll) +
+    //    // 8 bytes (primeros bytes de la tabla de nombres) = 28 bytes
+    //    (FunctionOffset){
+    //        68,  24, "MessageBoxA"
+    //    }, // offset_code indica donde debe ponerse la direccion de la funcion en el codigo
+    //    {
+    //        28, 34, "ExitProcess"},
+    //    //{36, 0x0, "WriteConsoleA"}
+    //};
 
-    corregirDesplazamientosCall(
-        codigoTexto, tamanoCodigoTexto, 
-        baseVirtualTexto, direccionIAT, 
-        stack_functions_offsets, 
-        sizeof(stack_functions_offsets) / sizeof(stack_functions_offsets[0])
-    );
+    // en este caso, nuestro codigo solo usa una vez MessageBoxA y ExitProcess, asi que
+    // solo debemos parchear dos instrucciones:
+    /**
+     * Función ExitProcess (DLL KERNEL32.dll) offset en IAT: 28
+     * Función WriteConsoleA (DLL KERNEL32.dll) offset en IAT: 36
+     * Función MessageBoxA (DLL USER32.dll) offset en IAT: 68
+     */
+    size_t numero_direciones_parchear = 2; // cantidad de direcciones que debemos parchear
+    FunctionOffset* stack_functions_offsets = calloc(2, sizeof(FunctionOffset));
+
+    // la primera llamada(stack_functions_offsets[0]) sera MessageBoxA(offsets[2])
+    stack_functions_offsets[0].offset_iat   = offsets[2].offset;
+    stack_functions_offsets[0].name         = offsets[2].functionName;
+    stack_functions_offsets[0].offset_code  = 24; // parchear la direccion offset 24
+    printf("Parcheando %p con %s\n", baseVirtualTexto + 24, offsets[2].functionName);
+
+    // la segunda llamada(stack_functions_offsets[1]) sera ExitProcess(offsets[0])
+    stack_functions_offsets[1].offset_iat   = offsets[0].offset;
+    stack_functions_offsets[1].name         = offsets[0].functionName;
+    stack_functions_offsets[1].offset_code  = 34; // parchear la direccion offset 34
+    printf("Parcheando %p con %s\n", baseVirtualTexto + 34, offsets[0].functionName);
+
+
+    parchearDesplazamientosPorOffset(codigoTexto, tamanoCodigoTexto,
+        baseVirtualTexto, direccionIAT,
+        stack_functions_offsets,
+        numero_direciones_parchear);
+
 
     // 4. Anexar codigo extra a la seccion .text (por ejemplo, tres NOPs)
     _BYTE extraCode[] = { 0x90, 0x90, 0x90 };

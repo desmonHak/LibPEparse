@@ -328,4 +328,136 @@ void elf_builder_free(ElfBuilder *b) {
     }
 }
 
+/**
+ * Permite crear una tabla PLT con la cantidad de entradas especificadas, cada entrada
+ * sera una "plt_entry_t", el cual ocupara 16 bytes.
+ * La primera entrada, de una PLT es especial y no deberia ser usada como el resto,
+ * la primera entrada permite la resolucion de los simbolos descritos en las siguientes entradas.
+ *
+ * Es necesario liberar la memoria usando free
+ *
+ * @param number_entry cantidad de entradas a reserbar.
+ * @return tabla con todas las entradas inicializadas
+ */
+plt_entry_t* init_plt_table(size_t number_entry) {
+    if (number_entry == 0) return NULL;
+    plt_entry_t *plt_code = calloc(sizeof(plt_entry_t), number_entry);
+
+    size_t counter = 0;
+    plt_code[0] = (plt_entry_t){ // la primera entrada es especial y tien codigo distinto al resto
+        .raw = {
+            // push QWORD PTR [rip+GOT[1]]: Apila link_map (puntero a metadatos)
+            0xff, 0x35, 0x00, 0x00, 0x00, 0x00,
+
+            // jmp QWORD PTR [rip+GOT[2]]: Salta a _dl_runtime_resolve (resolución dinámica)
+            0xff, 0x25, 0x00, 0x00, 0x00, 0x00,
+
+            0x0f, 0x1f, 0x40, 0x00, // nop padding para alineación de 16 bytes
+        }
+    };
+    counter += 1; // avanzar a la siguiente PLT
+
+    // codigo por defecto para cada entrada de la tabla de la PLT
+    const plt_entry_t plt_code_base_entry = {
+        // jmp QWORD PTR [rip+GOT_printf_offset]: Salto inicial (sin resolver) a la GOT
+        .jmp_got    = {0xff, 0x25, 0x00, 0x00, 0x00, 0x00},
+        .push       = {0x68, 0x00, 0x00, 0x00, 0x00},   // pushq indice: Índice de la funcion
+        .jmp_plt    = {0xe9, 0x00, 0x00, 0x00, 0x00}    // jmp PLT0: Inicia resolución
+    };
+
+    // copiar el contenido por defecto de una PLT a cada entrada
+    for (; counter < number_entry; ++counter) {
+        memcpy(&(plt_code[counter]), &plt_code_base_entry, sizeof(plt_entry_t));
+    }
+    return plt_code;
+}
+
+/**
+ * Convierte un array de tipo ImportLibrary, en su represantacion de tipo cadena
+ * @param libs_with_funcs array de librerias con las funciones asociadas de la que generar una
+ * cadena con todas estas contenidas.
+ * @param number_libs numero de librerias, equivalente al tamaño de "libs_with_funcs"
+ * @param size_output tamaño de la cadena de salida
+ * @return Una cadena unica separa por terminadores nulos, que se necesita para "dynstr":
+ * "\0printf\0libc.so.6\0"
+ */
+char* join_string_libs_func(ImportLibrary* libs_with_funcs, size_t number_libs, size_t* size_output) {
+
+    // tamaño del string final
+    size_t size_dynstr = 1;
+
+    // bucle para calcular el tamaño total de la cadena final
+    for (size_t index_lib = 0; index_lib < number_libs; index_lib++) {
+        // calcular la longitud del string de la libreria, mas el caracter nulo
+        size_dynstr += strlen(libs_with_funcs[index_lib].dllName) + 1;
+        for (size_t j = 0; j < libs_with_funcs[index_lib].numFunctions; j++) {
+            // sumar la longitud de cada string mas terminador nulo
+            size_dynstr += strlen(libs_with_funcs[index_lib].functions[j]) + 1;
+        }
+    }
+
+    // reservar memoria e inicializar con 0
+    char* dynstr = calloc(size_dynstr, 1);
+    if (!dynstr) return NULL;
+
+    // rellenar el string
+    size_t offset = 1; // empezamos desde el índice 1, dejando el primer '\0'
+    for (size_t i = 0; i < number_libs; i++) {
+        ImportLibrary* lib = &libs_with_funcs[i];
+
+        for (size_t j = 0; j < lib->numFunctions; j++) {
+            const char* func = lib->functions[j];
+            size_t len = strlen(func);
+            memcpy(&dynstr[offset], func, len);
+            offset += len + 1; // mover después del '\0'
+        }
+
+        const char* dll = lib->dllName;
+        size_t len = strlen(dll);
+        memcpy(&dynstr[offset], dll, len);
+        offset += len + 1;
+    }
+
+    *size_output = size_dynstr;
+    return dynstr;
+
+}
+
+void print_dynstr(const char* dynstr, size_t length) {
+    for (size_t i = 0; i < length; i++) {
+        if (dynstr[i] == '\0') {
+            printf("\\0");
+        } else {
+            putchar(dynstr[i]);
+        }
+    }
+    putchar('\n');
+}
+
+/**
+ * Permite buscar el offset donde empieza una cadena dada, buscando en un string como
+ * "\0printf\0puts\0libc.so.6\0"
+ * @param dynstr cadena de tipo "\0printf\0puts\0libc.so.6\0" en la que buscar
+ * @param target cadena a buscar, por ejemplo "printf"
+ * @return offset donde inicia la cadena
+ */
+size_t dynstr_find_offset(const char* dynstr, const char* target) {
+    size_t offset = 0;
+
+    while (dynstr[offset] != '\0' || offset == 0) {
+        // Compara el nombre actual con el objetivo
+        if (strcmp(&dynstr[offset], target) == 0) {
+            return offset;
+        }
+
+        // Avanza al siguiente string
+        offset += strlen(&dynstr[offset]) + 1;
+    }
+
+    // No encontrado
+    return (size_t)-1;
+}
+
+
+
 #endif // CREATE_ELF_C

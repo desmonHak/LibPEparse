@@ -23,10 +23,18 @@ typedef struct {
 } ImportLibrary;
 
 // Estructura para mapear offsets de funciones
-typedef struct {
-    int offset;
+typedef struct FunctionOffset {
+    int offset_iat;
+    uint32_t offset_code;
     const char* name;
 } FunctionOffset;
+
+typedef struct {
+    const char* functionName;
+    const char* dllName;
+    int offset; // offset relativo al inicio de la IAT
+} ImportOffsetEntry;
+
 
 // Prototipos de funciones auxiliares y de extension
 void initializePE64File(PE64FILE_struct* pe);
@@ -39,8 +47,12 @@ void finalizePE64File(PE64FILE_struct* pe);
 void writePE64File(PE64FILE_struct* pe, const char* filename);
 void freePE64File(PE64FILE_struct* pe);
 _BYTE* buildMultiIdataSection(ImportLibrary* libs, int numLibs, _DWORD idataRVA, _DWORD* outSize);
-void corregirDesplazamientosCall(
-    uint8_t* codigo, size_t tamanoCodigo, 
-    uint64_t baseVirtualSeccion, uint64_t direccionIAT, FunctionOffset* funcOffsets, int numFunciones);
+_BYTE* buildMultiIdataSectionWithOffsets(
+    ImportLibrary* libs, int numLibs, _DWORD idataRVA, _DWORD* outSize,
+    ImportOffsetEntry** outOffsets, int* outNumOffsets);
+void parchearDesplazamientosPorOffset(
+    uint8_t* codigo, size_t tamanoCodigo,
+    uint64_t baseVirtualSeccion, uint64_t direccionIAT,
+    FunctionOffset* funcOffsets, int numFunciones);
 
 #endif

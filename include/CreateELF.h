@@ -241,6 +241,52 @@ size_t elf_builder_add_section_ex(
 );
 
 
+/**
+ * Las entradas a la PLT, ocupan 16bytes, no creo que se pueda definir campos mas grandes
+ * y menores no permitirian que las entradas esten alineadas, asi que el linker dinamico
+ * exije este tamaño.
+ *
+ * Las entradas en 32bits para x86 no cambian demasiado:
+ * <printf@plt>:
+ *      jmp DWORD PTR [<dirección_en_GOT>]   ; 1. Salta a la dirección almacenada en la GOT
+ *      push <relocation_index>              ; 2. Apila el índice de relocalización
+ *      jmp <plt0>                           ; 3. Salta al inicio de la PLT (PLT0)
+ */
+typedef struct plt_entry_t{
+    union {
+        struct {
+            union {
+                uint8_t jmp_got[6];                 // jmp QWORD PTR [rip + offset_to_GOT]
+                struct {
+                    uint16_t opcode_jmp_got_rip;    // opcode 0xff, 0x25 == jmp QWORD PTR
+                    uint32_t offset_jmp_got;        // [rip + offset_to_GOT]
+                };
+            };
+            union {
+                uint8_t push[5];                    // push <relocation_index>
+                struct {
+                    uint8_t opcode_push;            // 0x68 opcode == push
+                    uint32_t offset_got;            // relocation_index
+                };
+            };
+            union {
+                uint8_t jmp_plt[5];                 // jmp <plt0>
+                struct {
+                    uint8_t opcode_jmp_plt;         // opcode 0xff, 0x25 == jmp QWORD PTR
+                    uint32_t offset_jmp_plt_got;    // [rip + offset_to_GOT]
+                };
+            };
+        };
+        // cada entrada son 16 bytes
+        uint8_t raw[16];
+    };
+} plt_entry_t;
+plt_entry_t* init_plt_table(size_t number_entry);
+
+void print_dynstr(const char* dynstr, size_t length);
+char* join_string_libs_func(ImportLibrary* libs_with_funcs, size_t number_libs, size_t* size_output);
+size_t dynstr_find_offset(const char* dynstr, const char* target);
+
 // Libera todos los recursos asociados con el ElfBuilder
 void elf_builder_free(ElfBuilder *b);
 #endif // CREATE_ELF_H
