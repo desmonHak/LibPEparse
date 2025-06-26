@@ -284,6 +284,8 @@ typedef struct plt_entry_t{
 } plt_entry_t;
 plt_entry_t* init_plt_table(size_t number_entry);
 
+size_t align_file_offset_page(void* mem, size_t current_file_offset, size_t size_alignment);
+
 void init_plt0(
     plt_entry_t *plt,
     uint64_t plt_section_vaddr,

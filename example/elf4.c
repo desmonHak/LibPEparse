@@ -20,8 +20,9 @@ int main() {
         /* 39 */ 0x0f, 0x05                    // syscall (2 bytes)
     };
 
+    uint64_t base_vaddr = 0x400000;     // direccion base donde se carga el ejecutable
+    size_t capacity = 16 * PAGE_SIZE;   // capacidad maxima para el ejecutable
     size_t code_size = sizeof(code);
-
 
     const char hello_str[] = "Hello world\n";  // String to print, includes null terminator
     size_t data_size = sizeof(hello_str); // Includes null terminator
@@ -39,8 +40,7 @@ int main() {
     uint8_t *dynstr = join_string_libs_func(libs, sizeof(libs) / sizeof(libs[0]), &sizeof_dynstr);
     print_dynstr(dynstr, sizeof_dynstr);
 
-    uint64_t base_vaddr = 0x400000;     // direccion base donde se carga el ejecutable
-    size_t capacity = 16 * PAGE_SIZE;   // capacidad maxima para el ejecutable
+
 
     // crear parte del ELF con 5 cabeceras de prgorama:
     ElfBuilder *b = elf_builder_create_exec64(capacity, 5);
@@ -68,7 +68,7 @@ int main() {
         current_file_offset += padding;
         b->size = current_file_offset; // Update builder's size to reflect padding
     }
-
+    b->size = align_file_offset_page(b->mem, current_file_offset, PAGE_SIZE);
 
     // añadir seccion .text
     size_t text_section_off;     // offset para la seccion .text
@@ -99,12 +99,7 @@ int main() {
 
 
     // Ensure the Read-Write sections (.data, .got.plt, .dynamic) start at a new page boundary.
-    if (current_file_offset % PAGE_SIZE != 0) {
-        size_t padding = PAGE_SIZE - (current_file_offset % PAGE_SIZE);
-        memset(b->mem + current_file_offset, 0, padding);
-        current_file_offset += padding;
-        b->size = current_file_offset; // Update builder's size
-    }
+    b->size = align_file_offset_page(b->mem, current_file_offset, PAGE_SIZE);
 
 
     // Calculate the end of the first (executable) segment in the file.
@@ -122,12 +117,7 @@ int main() {
     current_file_offset = b->size; // Update current_file_offset
 
     // Properly align .got.plt (Global Offset Table for PLT), typically 8-byte aligned.
-    if (current_file_offset % 8 != 0) {
-        size_t padding = 8 - (current_file_offset % 8);
-        memset(b->mem + current_file_offset, 0, padding);
-        current_file_offset += padding;
-        b->size = current_file_offset;
-    }
+    b->size = align_file_offset_page(b->mem, current_file_offset, 8);
     // Add .got.plt section
     // GOT[0] Dirección de la sección .dynamic (usada internamente por el dynamic linker).
     // GOT[1] Puntero a la estructura link_map (usada internamente por el dynamic linker)
@@ -159,12 +149,7 @@ int main() {
     // Add .interp section (Program interpreter path)
     // Contains the path to the dynamic linker (e.g., /lib64/ld-linux-x86-64.so.2).
     // No specific alignment required, typically 1-byte aligned.
-    if (current_file_offset % 8 != 0) {
-        size_t padding = 8 - (current_file_offset % 8);
-        memset(b->mem + current_file_offset, 0, padding);
-        current_file_offset += padding;
-        b->size = current_file_offset;
-    }
+    b->size = align_file_offset_page(b->mem, current_file_offset, 8);
     size_t interp_section_off;
     uint64_t interp_section_vaddr;
     elf_builder_add_section_ex(
@@ -177,12 +162,6 @@ int main() {
     // Add .dynstr section (Dynamic string table)
     // Contains names for dynamic symbols (like "printf") and shared libraries (like "libc.so.6").
     // 1-byte aligned for string table.
-    if (current_file_offset % 1 != 0) {
-        size_t padding = 1 - (current_file_offset % 1);
-        memset(b->mem + current_file_offset, 0, padding);
-        current_file_offset += padding;
-        b->size = current_file_offset;
-    }
     size_t dynstr_section_off;
     uint64_t dynstr_section_vaddr;
     size_t idx_dynstr = elf_builder_add_section_ex(
@@ -195,15 +174,8 @@ int main() {
 
 
 
-
-
     // Align before .dynsym (Dynamic Symbol Table), typically 8-byte aligned.
-    if (current_file_offset % 8 != 0) {
-        size_t padding = 8 - (current_file_offset % 8);
-        memset(b->mem + current_file_offset, 0, padding);
-        current_file_offset += padding;
-        b->size = current_file_offset;
-    }
+    b->size = align_file_offset_page(b->mem, current_file_offset, 8);
     // Add .dynsym section
     Elf64_Sym dynsym[3] = {0}; // Array for dynamic symbols
     // dynsym[0]: Null symbol (mandatory first entry)
@@ -243,12 +215,7 @@ int main() {
 
 
     // Align before .rela.plt (Relocation Entries with Addend for PLT), typically 8-byte aligned.
-    if (current_file_offset % 8 != 0) {
-        size_t padding = 8 - (current_file_offset % 8);
-        memset(b->mem + current_file_offset, 0, padding);
-        current_file_offset += padding;
-        b->size = current_file_offset;
-    }
+    b->size = align_file_offset_page(b->mem, current_file_offset, 8);
     // Add .rela.plt section
     Elf64_Rela rela[2] = {0}; // Single relocation entry for printf
     // r_offset: Virtual address of GOT[3] (where the resolved printf address will be stored)
@@ -279,14 +246,7 @@ int main() {
 
 
     // Align before .dynamic (Dynamic Section), typically 16-byte aligned.
-    if (current_file_offset % 16 != 0) {
-        size_t padding = 16 - (current_file_offset % 16);
-        memset(b->mem + current_file_offset, 0, padding);
-        current_file_offset += padding;
-        b->size = current_file_offset;
-    }
-
-
+    b->size = align_file_offset_page(b->mem, current_file_offset, 16);
     // Add .dynamic section
     // This table provides information to the dynamic linker.
     Elf64_Dyn dynamic[] = {

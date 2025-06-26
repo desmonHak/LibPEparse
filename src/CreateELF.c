@@ -591,5 +591,22 @@ void resolve_and_patch_got_plt(
     plt[plt_index].offset_jmp_plt_got = (int32_t)(plt_section_vaddr - GET_PLT_ENTRY_ADDR(plt_section_vaddr, (plt_index + 1)));
 }
 
+/**
+ * Permite alinear una direccion de memoria de tamaño "size_alignment"
+ * rellenando con valores nulos de por medio.
+ * @param mem puntero de la memoria que alinear
+ * @param current_file_offset tamaño ocupado de la memoria usada, mem - size es el inicio de mem.
+ * @param size_alignment tamaño a alinear
+* @return el nuevo tamaño, "current_file_offset - size" = cantidad de
+* bytes nulos añadidos
+ */
+size_t align_file_offset_page(void* mem, size_t current_file_offset, size_t size_alignment) {
+    if (current_file_offset % size_alignment != 0) {
+        size_t padding = size_alignment - (current_file_offset % size_alignment);
+        memset(mem + current_file_offset, 0, padding);
+        current_file_offset += padding;
+    }
+    return current_file_offset;
+}
 
 #endif // CREATE_ELF_C

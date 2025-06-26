@@ -38,7 +38,6 @@
   <component name="ChangeListManager">
     <list default="true" id="8e9565b1-ca0c-4906-805c-59a53e0d29f0" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/elf3.c" beforeDir="false" afterPath="$PROJECT_DIR$/example/elf3.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/example/elf4.c" beforeDir="false" afterPath="$PROJECT_DIR$/example/elf4.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/include/CreateELF.h" beforeDir="false" afterPath="$PROJECT_DIR$/include/CreateELF.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/CreateELF.c" beforeDir="false" afterPath="$PROJECT_DIR$/src/CreateELF.c" afterDir="false" />
@@ -242,7 +241,7 @@
       <workItem from="1750777989470" duration="601000" />
       <workItem from="1750912509470" duration="1026000" />
       <workItem from="1750920392706" duration="5829000" />
-      <workItem from="1750932593714" duration="8080000" />
+      <workItem from="1750932593714" duration="8791000" />
     </task>
     <servers />
   </component>
