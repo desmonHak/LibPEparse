@@ -140,17 +140,18 @@
 #define R_X86_64_RELATIVE 8
 
 /**
- * Parchea instrucciones como "jmp QWORD PTR [rip+GOT_printf_offset]", donde los primeros
- * 2 bytes indica la instruccion y los siguientes el desplazamiento que sumar:
- *      ff 25 00 00 00 00  == jmp QWORD PTR [ rip + 0 ]
- *
- * @param mem El puntero al buffer de memoria donde está el código.
- * @param plt_off El offset dentro del buffer donde empieza la instrucción.
- * @param rip La dirección de la siguiente instrucción (valor de RIP al ejecutar la instrucción actual).
- * @param target La dirección de memoria a la que queremos saltar o acceder.
+ * Permite obtener la direccion a la entrada de la GOT especificada, cada entrada ocupa 8 bytes(un puntero)
+ * @param address_got direccion absoluta, o relativa o virtual a la GOT
+ * @param index indice de la entrada
  */
-#define PATCH_PLT_OFFSET(mem, plt_off, rip, target) \
-    *(int32_t *)((mem) + (plt_off) + 2) = (int32_t)((target) - (rip))
+#define GET_GOT_ENTRY_ADDR(address_got, index) (address_got + 8 * (index))
+
+/**
+ * Permite obtener la direccion a la entrada de la PLT especificada, cada entrada ocupa 16 bytes(normalmente)
+ * @param address_plt direccion absoluta, o relativa o virtual a la PLT
+ * @param index indice de la entrada
+ */
+#define GET_PLT_ENTRY_ADDR(address_plt, index) (address_plt + 16 * (index))
 
 typedef struct {
     uint8_t *mem;        // Main buffer for the ELF image
@@ -282,6 +283,24 @@ typedef struct plt_entry_t{
     };
 } plt_entry_t;
 plt_entry_t* init_plt_table(size_t number_entry);
+
+void init_plt0(
+    plt_entry_t *plt,
+    uint64_t plt_section_vaddr,
+    uint64_t got_plt_section_vaddr
+);
+void resolve_and_patch_got_plt(
+    plt_entry_t *plt,
+    size_t plt_index,
+    void *text_section,
+    uint64_t plt_section_vaddr,
+    uint64_t got_plt_section_vaddr,
+    uint32_t got_plt_index,
+    uint64_t text_section_vaddr,
+    uint32_t index_func,
+    size_t offset_path_instruction,
+    size_t sizeof_instruction
+);
 
 void print_dynstr(const char* dynstr, size_t length);
 char* join_string_libs_func(ImportLibrary* libs_with_funcs, size_t number_libs, size_t* size_output);

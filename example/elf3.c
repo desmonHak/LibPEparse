@@ -17,14 +17,14 @@ int main() {
     // 5. Set EAX to 60 (syscall number for sys_exit).
     // 6. Execute the syscall to exit.
     uint8_t code[] = {
-        0x48, 0xbf, 0,0,0,0, 0,0,0,0, // mov rdi, <address_of_string> (10 bytes)
-        0x31, 0xc0,                   // xor eax, eax (2 bytes, for printf's %eax = 0)
-        0xe8, 0,0,0,0,                // call printf@plt (5 bytes)
-        0x48, 0xbf, 0,0,0,0, 0,0,0,0, // mov rdi, <address_of_string> (10 bytes)
-        0xe8, 0,0,0,0,                // call puts@plt (5 bytes)
-        0x31, 0xff,                   // xor edi, edi (2 bytes, for sys_exit's %edi = 0 status)
-        0xb8, 0x3c, 0x00, 0x00, 0x00, // mov eax, 60 (sys_exit) (5 bytes)
-        0x0f, 0x05                    // syscall (2 bytes)
+        /* 00 */ 0x48, 0xbf, 0,0,0,0, 0,0,0,0, // mov rdi, <address_of_string> (10 bytes)
+        /* 10 */ 0x31, 0xc0,                   // xor eax, eax (2 bytes, for printf's %eax = 0)
+        /* 12 */ 0xe8, 0,0,0,0,                // call printf@plt (5 bytes)
+        /* 17 */ 0x48, 0xbf, 0,0,0,0, 0,0,0,0, // mov rdi, <address_of_string> (10 bytes)
+        /* 27 */ 0xe8, 0,0,0,0,                // call puts@plt (5 bytes)
+        /* 32 */ 0x31, 0xff,                   // xor edi, edi (2 bytes, for sys_exit's %edi = 0 status)
+        /* 34 */ 0xb8, 0x3c, 0x00, 0x00, 0x00, // mov eax, 60 (sys_exit) (5 bytes)
+        /* 39 */ 0x0f, 0x05                    // syscall (2 bytes)
     };
 
     const char hello_str[] = "Hello world\n";  // String to print, includes null terminator
@@ -377,7 +377,7 @@ int main() {
      *  base_address_PLT_section + 16(tamaño de cada entrada de la PLT) * index_PLT(indice de la entrada a la PLT) +
      *      6 (bytes que ocupa la instruccion jmp).
      */
-    printf("plt_section_vaddr + 16 * 1 == %x\n", plt_section_vaddr + 16 * 2);
+    printf("plt_section_vaddr + 16 * 2 == %x\n", plt_section_vaddr + 16 * 2);
     ((uint64_t *)(b->mem + got_plt_section_off))[4] = plt_section_vaddr + 16 * 2 + 6;
 
     printf("b->mem + got_plt_section_off == %x\n", base_vaddr + got_plt_section_off);

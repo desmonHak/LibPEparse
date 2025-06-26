@@ -10,14 +10,14 @@
 int main() {
 
     uint8_t code[] = {
-        0x48, 0xbf, 0,0,0,0, 0,0,0,0, // mov rdi, <address_of_string> (10 bytes)
-        0x31, 0xc0,                   // xor eax, eax (2 bytes, for printf's %eax = 0)
-        0xe8, 0,0,0,0,                // call printf@plt (5 bytes)
-        0x48, 0xbf, 0,0,0,0, 0,0,0,0, // mov rdi, <address_of_string> (10 bytes)
-        0xe8, 0,0,0,0,                // call puts@plt (5 bytes)
-        0x31, 0xff,                   // xor edi, edi (2 bytes, for sys_exit's %edi = 0 status)
-        0xb8, 0x3c, 0x00, 0x00, 0x00, // mov eax, 60 (sys_exit) (5 bytes)
-        0x0f, 0x05                    // syscall (2 bytes)
+        /* 00 */ 0x48, 0xbf, 0,0,0,0, 0,0,0,0, // mov rdi, <address_of_string> (10 bytes)
+        /* 10 */ 0x31, 0xc0,                   // xor eax, eax (2 bytes, for printf's %eax = 0)
+        /* 12 */ 0xe8, 0,0,0,0,                // call printf@plt (5 bytes)
+        /* 17 */ 0x48, 0xbf, 0,0,0,0, 0,0,0,0, // mov rdi, <address_of_string> (10 bytes)
+        /* 27 */ 0xe8, 0,0,0,0,                // call puts@plt (5 bytes)
+        /* 32 */ 0x31, 0xff,                   // xor edi, edi (2 bytes, for sys_exit's %edi = 0 status)
+        /* 34 */ 0xb8, 0x3c, 0x00, 0x00, 0x00, // mov eax, 60 (sys_exit) (5 bytes)
+        /* 39 */ 0x0f, 0x05                    // syscall (2 bytes)
     };
 
     size_t code_size = sizeof(code);
@@ -136,6 +136,8 @@ int main() {
     // GOT[4] is the entry for `puts`
     uint64_t got_plt[5] = {0}; // Initialize all entries to 0
 
+
+
     size_t got_plt_section_off;
     uint64_t got_plt_section_vaddr;
     elf_builder_add_section_ex(
@@ -145,6 +147,8 @@ int main() {
         &got_plt_section_off, &got_plt_section_vaddr, 0, 0, 0
     );
     current_file_offset = b->size;
+
+
 
     // Patch the string address into the `mov rdi` instruction in the code.
     // The instruction `mov rdi, QWORD imm64` is 10 bytes long.
@@ -191,6 +195,8 @@ int main() {
 
 
 
+
+
     // Align before .dynsym (Dynamic Symbol Table), typically 8-byte aligned.
     if (current_file_offset % 8 != 0) {
         size_t padding = 8 - (current_file_offset % 8);
@@ -218,6 +224,8 @@ int main() {
     dynsym[2].st_info = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC); // Global, Function type
     dynsym[2].st_shndx = SHN_UNDEF; // Undefined section, resolved at runtime by dynamic linker
     printf("Offset puts in dynstr == %d\n", dynsym[2].st_name);
+
+
 
     size_t dynsym_section_off;
     uint64_t dynsym_section_vaddr;
@@ -312,7 +320,6 @@ int main() {
 
 
 
-
     // pondremos la seccion .dynamic, la necesita el linker
     ((uint64_t *)(b->mem + got_plt_section_off))[0] = dynamic_section_vaddr;
 
@@ -321,16 +328,9 @@ int main() {
      * la entrada para printf (PLT1) empieza justo después, en el offset 16,
      * por lo que, plt_section_vaddr + 16 es la dirección de la entrada PLT para printf.
      */
-    printf("plt_section_vaddr + 16 * 1 == %x\n", plt_section_vaddr + 16 * 1);
-    ((uint64_t *)(b->mem + got_plt_section_off))[3] = plt_section_vaddr + 16 * 1 + 6;
+    ((uint64_t *)(b->mem + got_plt_section_off))[3] = GET_PLT_ENTRY_ADDR(plt_section_vaddr, 1) + 6;
+    ((uint64_t *)(b->mem + got_plt_section_off))[4] = GET_PLT_ENTRY_ADDR(plt_section_vaddr, 2) + 6;
 
-    printf("plt_section_vaddr + 16 * 1 == %x\n", plt_section_vaddr + 16 * 2);
-    ((uint64_t *)(b->mem + got_plt_section_off))[4] = plt_section_vaddr + 16 * 2 + 6;
-
-    printf("b->mem + got_plt_section_off == %x\n", base_vaddr + got_plt_section_off);
-
-    printf("b->mem + [[3]] == %x\n", (((void *)&((uint64_t *)(b->mem + got_plt_section_off))[3]) - (void *)(b->mem + got_plt_section_off)));
-    printf("b->mem + [[4]] == %x\n", (((void *)&((uint64_t *)(b->mem + got_plt_section_off))[4]) - (void *)(b->mem + got_plt_section_off)));
 
 
 
@@ -380,73 +380,17 @@ int main() {
     current_file_offset = b->size;
 
 
-    // --- Patching the PLT stubs' relative offsets ---
-
-    // Patch the call to printf@plt in the code (`0xe8, 0,0,0,0`)
-    // The call instruction is at `text_section_vaddr + 12`.
-    // The relative offset is calculated from the *address of the instruction's operand*, which is `call_instruction_vaddr + 1`.
-    // The RIP register, when calculating the relative jump, points to the instruction *after* the current one.
-    // A 5-byte call instruction: `0xE8 [offset_bytes]`
-    // `rip` will be `(text_section_vaddr + 12) + 5` after the call instruction executes.
-    uint64_t call_instruction_vaddr = text_section_vaddr + 12; // calculamos la instruccion a modificar
-    // calculamos la entrada de la PLT que resolvera el simbolo, "printf" en este caso, la cual es PLT[1]
-    uint64_t plt1_entry_vaddr = plt_section_vaddr + 16 * 1;
-
-    // rel32_printf_call = plt1_entry_vaddr - (call_instruction_vaddr + 5)
-    // offset            = destino          - (dirección_de_la_siguiente_instrucción)
-    // se debe calcular un desplazamiento, pues el call usado, no salta a una direccion absoluta, sino un offset
-    // especifico, para saber esto calcula cuántos bytes hay que saltar (hacia adelante o hacia atrás)
-    // desde la instrucción siguiente al call hasta la entrada PLT de printf
-    int32_t rel32_printf_call                    = (int32_t) (plt1_entry_vaddr - (call_instruction_vaddr + 5));
-
-    // parchear la instruccion call con el offset relativo a la funcion de la PLT obtenida anteriomente.
-    *(int32_t *)(b->mem + text_section_off + 13) = rel32_printf_call; // Offset 13 within code[] for the 4-byte operand
-
-
-    // Patch offsets in PLT stubs' instructions for position-independent code (PIC)
-    // PLT0: `push QWORD PTR [rip+X]` (points to GOT+8, i.e., GOT[1])
-    // Instruction `0xff, 0x35` is at `plt_section_off + 0`. It's 6 bytes long.
-    // `RIP` will be `plt_section_vaddr + 6`. Target is `got_plt_section_vaddr + 8`.
-    *(int32_t *)(b->mem + plt_section_off + 2) = (int32_t)((got_plt_section_vaddr + 8 * 1) - (plt_section_vaddr + 6));
-
-    // PLT0: `jmp  QWORD PTR [rip+Y]` (points to GOT+16, i.e., GOT[2])
-    // Instruction `0xff, 0x25` is at `plt_section_off + 6`. It's 6 bytes long.
-    // `RIP` will be `plt_section_vaddr + 6 + 6 = plt_section_vaddr + 12`. Target is `got_plt_section_vaddr + 16`.
-    *(int32_t *)(b->mem + plt_section_off + 8) = (int32_t)((got_plt_section_vaddr + 8 * 2) - (plt_section_vaddr + 12));
-
-    // PLT1 (printf stub): `jmp QWORD PTR [rip+Z]` (points to GOT+24, i.e., GOT[3], for printf's resolved address)
-    // Instruction `0xff, 0x25` is at `plt_section_off + 24`. It's 6 bytes long.
-    // `RIP` will be `plt_section_vaddr + 24 + 6 = plt_section_vaddr + 22`. Target is `got_plt_section_vaddr + 16`.
-    *(int32_t *)(b->mem + plt_section_off + 18) = (int32_t)((got_plt_section_vaddr + 8*3) - (plt_section_vaddr + 22));
-
-    // PLT1 (printf stub): `pushq <relocation index>`
-    // The relocation index for `printf` in our `.rela.plt` section is 0 (as it's the first and only entry).
-    // The `pushq` opcode (0x68) is at plt_section_off + 22. Its 4-byte operand starts at plt_section_off + 23.
-    *(uint32_t *)(b->mem + plt_section_off + 23) = 0; // Corrected offset
-
-    // PLT1 (printf stub): `jmp .plt[0]` (jump back to the global PLT entry PLT0)
-    // Instruction `0xe9` is at `plt_section_off + 27`. It's 5 bytes long.
-    // The operand starts at plt_section_off + 28.
-    // `RIP` after instruction is `plt_section_vaddr + 27 + 5 = plt_section_vaddr + 32`.
-    // Target is `plt_section_vaddr` (PLT0 start).
-    // Relative offset = Target - RIP_after_instruction = plt_section_vaddr - (plt_section_vaddr + 32) = -32.
-    *(int32_t *)(b->mem + plt_section_off + 28) = (int32_t)(plt_section_vaddr - (plt_section_vaddr + 32)); // Corrected offset and value
-
-
-
-    uint64_t call_instruction_vaddr_puts = text_section_vaddr + 24; // calculamos la instruccion a modificar
-    uint64_t plt2_entry_vaddr_puts = plt_section_vaddr + 16 * 2; // PLT[2]
-    int32_t rel32_puts_call  = (int32_t) (plt2_entry_vaddr_puts - (call_instruction_vaddr_puts + 8));
-
-    *(int32_t *)(b->mem + text_section_off + 28) = rel32_puts_call ;
-
-    *(int32_t *)(b->mem + plt_section_off + 32 + 2) = (int32_t)(
-        (got_plt_section_vaddr + 4 * 8) - (plt_section_vaddr + 32 + 6)
+    // Parcheo de la PLT y el codigo
+    plt_entry_t *plt =  (plt_entry_t *)(b->mem + plt_section_off);
+    init_plt0(plt, plt_section_vaddr, got_plt_section_vaddr);
+    resolve_and_patch_got_plt(plt, 1, (b->mem + text_section_off  + 12),
+        plt_section_vaddr, got_plt_section_vaddr , 3, text_section_vaddr + 12,
+        0, 1, 5
     );
-
-    *(int32_t *)(b->mem + plt_section_off + 16 * 3 -4) = (int32_t)(plt_section_vaddr - (plt_section_vaddr + 16 * 3)); // Corrected offset and value
-
-
+    resolve_and_patch_got_plt(plt, 2, (b->mem + text_section_off  + 27),
+        plt_section_vaddr, got_plt_section_vaddr , 4, text_section_vaddr + 27,
+        1, 1, 5
+    );
 
     // Segment 0: Executable segment (PT_LOAD, PF_R | PF_X)
     // Covers the ELF Header, Program Headers themselves, .text, and .plt.

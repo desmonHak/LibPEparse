@@ -458,6 +458,138 @@ size_t dynstr_find_offset(const char* dynstr, const char* target) {
     return (size_t)-1;
 }
 
+void init_plt0(
+    plt_entry_t *plt,
+    uint64_t plt_section_vaddr,
+    uint64_t got_plt_section_vaddr
+) {
+    /**
+     * Debemos calcular el desplazamiento entre la segunda entrada de la GOT(GOT[1]) y la instruccion
+     * push QWORD PTR [rip+GOT[1]_offset]", la primera entrada de la GOT contiene el "link_map" necesario
+     * para llamar al linker
+     * :
+     *         // PLT0 (Offset 0 in .plt section, used for dynamic linker setup)
+     *         // push QWORD PTR [rip+GOT[1]_offset]
+     *         // This pushes the link_map pointer (GOT[1]) onto the stack.
+     *         0xff, 0x35, 0,0,0,0,
+     *         // jmp QWORD PTR [rip+GOT[2]_offset]
+     *         // This jumps to the _dl_runtime_resolve function provided by the dynamic linker (GOT[2]).
+     *         0xff, 0x25, 0,0,0,0,
+     *         0x0f, 0x1f, 0x40, 0x00,          // nop dword ptr [rax+0x0] (padding for 16-byte alignment)
+     *
+     * Para acceder a la segunda entrada de la GOT, se debe multiplicar 8(tamaño de cada entrada) por el indice
+     * al que queremos acceder "1" y sumar esto a la direccion base VIRTUAL de la GOT:
+     *          got_plt_section_vaddr + 8 * 1 == GET_GOT_ENTRY_ADDR(got_plt_section_vaddr, 1)
+     * Luego debermos acceder a la instruccion PUTS de la PLT[0], la cual ocupa 6 bytes la instruccion, por lo que lo
+     * sumaremos a la direccion base de la PLT(PLT[0]) y restaremos las direcciones ya descritas, obteniendo una
+     * diferencia el cual corresponde al offset que el push necesita
+     */
+    plt[0].offset_jmp_got = (int32_t)(GET_GOT_ENTRY_ADDR(got_plt_section_vaddr, 1) - (plt_section_vaddr + 6));
+
+    // PLT0: `jmp  QWORD PTR [rip+Y]` (points to GOT+16, i.e., GOT[2])
+    // Instruction `0xff, 0x25` is at `plt_section_off + 6`. It's 6 bytes long.
+    // `RIP` will be `plt_section_vaddr + 6 + 6 = plt_section_vaddr + 12`. Target is `got_plt_section_vaddr + 16`.
+    *(int32_t *)((void*)&plt + 8) = (int32_t)(GET_GOT_ENTRY_ADDR(got_plt_section_vaddr, 2) - (plt_section_vaddr + 12));
+
+}
+
+/**
+ * Permite parchear una instruccion que debe apuntar a una direccion de la PLT para
+ * llamar a alguna funcion de alguna libreria externa.
+ *
+ * @param plt PLT que modificar, debe ser un buffer de 16 bytes * numero_entradas_PLT.
+ * @param plt_index indice de la entrada PLT que parchear para que apunte a la GOT indicada
+ * y PLT que usar parchear la instruccion del codigo real.
+ * @param text_section seccion de texto desplazada al inicio de la instruccion que desea modificar.
+ * @param plt_section_vaddr direccion virtual incial de la seccion PLT.
+ * @param got_plt_section_vaddr direccion virtual incial de la GOT.
+ * @param got_plt_index indice de la GOT que usar, los indices 0, 1 y 2 estan reservados para el linker.
+ * @param text_section_vaddr direccion virtual desplazada con el offset de la isntruccion a modificar.
+ * @param index_func indice de la funcion que ocupara este espacio.
+ * @param offset_path_instruction offset de la instruccion desde la que modificar la instruccion, por ejemplo
+ * para un "0xFF, 0x15, 0x00, 0x00, 0x00, 0x00" // call [RIP+disp32] el offset empieza apartir de
+ * "0xFF, 0x15", que son 2 bytes.
+ * @param sizeof_instruction tamaño de la instruccion completa a modificar.
+ */
+void resolve_and_patch_got_plt(
+    plt_entry_t *plt,
+    size_t plt_index,
+    void *text_section,
+    uint64_t plt_section_vaddr,
+    uint64_t got_plt_section_vaddr,
+    uint32_t got_plt_index,
+    uint64_t text_section_vaddr,
+    uint32_t index_func,
+    size_t offset_path_instruction,
+    size_t sizeof_instruction
+) {
+    printf("[*] Debug Info:\n");
+    printf("    plt:                  0x%p\n", (void *)plt);
+    printf("    plt_index:            0x%zx\n", plt_index);
+    printf("    text_section:         0x%p\n", text_section);
+    printf("    plt_section_vaddr:    0x%016lx\n", plt_section_vaddr);
+    printf("    got_plt_section_vaddr:0x%016lx\n", got_plt_section_vaddr);
+    printf("    got_plt_index:        0x%08x\n", got_plt_index);
+    printf("    text_section_vaddr:   0x%016lx\n", text_section_vaddr);
+    printf("    index_func:           0x%08x\n", index_func);
+    printf("    offset_path_instruction: 0x%zx\n", offset_path_instruction);
+    printf("    sizeof_instruction:   0x%zx\n", sizeof_instruction);
+
+
+    /**
+     * se espera recibir la direccion virtual de la instruccion
+     */
+    uint64_t call_instruction_vaddr = text_section_vaddr;
+
+    /**
+     * Debemos obtener la entrada a la PLT de este simbolo, siempre debera ser el index_func + 1
+     */
+    uint64_t plt_entry_vaddr = GET_PLT_ENTRY_ADDR(plt_section_vaddr, plt_index);
+    printf("    plt_entry_vaddr:      0x%016lx\n", plt_entry_vaddr);
+    /**
+     * calcular la direccion relativa de la instruccion a parchear, se realiza:
+     *      (la direccion virtual de la instruccion + el tamaño de la instruccion) -
+     *      (la direcion base virtual de la entrada a la PLT que queremos acceder )
+     */
+    int32_t rel32_instruction = (int32_t) (plt_entry_vaddr - (call_instruction_vaddr + sizeof_instruction));
+    printf("    rel32_instruction:    0x%08x\n", (uint32_t)rel32_instruction);
+
+    /**
+     * Parcheamos la instruccion desde offset indicado:
+     */
+    *(int32_t *)(text_section + offset_path_instruction) = rel32_instruction;
+    printf("    Patched instruction at offset 0x%zx\n", offset_path_instruction);
+
+    /**
+     * Ejemplo:
+     * Debemos calcular el desplazamiento entre la segunda entrada de la GOT(GOT[1]) y la instruccion
+     * push QWORD PTR [rip+GOT[1]_offset]", la primera entrada de la GOT contiene el "link_map" necesario
+     * para llamar al linker
+     * :
+     *         // PLT0 (Offset 0 in .plt section, used for dynamic linker setup)
+     *         // push QWORD PTR [rip+GOT[1]_offset]
+     *         // This pushes the link_map pointer (GOT[1]) onto the stack.
+     *         0xff, 0x35, 0,0,0,0,
+     *         // jmp QWORD PTR [rip+GOT[2]_offset]
+     *         // This jumps to the _dl_runtime_resolve function provided by the dynamic linker (GOT[2]).
+     *         0xff, 0x25, 0,0,0,0,
+     *         0x0f, 0x1f, 0x40, 0x00,          // nop dword ptr [rax+0x0] (padding for 16-byte alignment)
+     *
+     * Para acceder a la segunda entrada de la GOT, se debe multiplicar 8(tamaño de cada entrada) por el indice
+     * al que queremos acceder "1" y sumar esto a la direccion base VIRTUAL de la GOT:
+     *          got_plt_section_vaddr + 8 * 1 == GET_GOT_ENTRY_ADDR(got_plt_section_vaddr, 1)
+     * Luego debermos acceder a la instruccion PUTS de la PLT[0], la cual ocupa 6 bytes la instruccion, por lo que lo
+     * sumaremos a la direccion base de la PLT(PLT[0]) y restaremos las direcciones ya descritas, obteniendo una
+     * diferencia el cual corresponde al offset que el push necesita
+     */
+    plt[plt_index].offset_jmp_got = (int32_t)(
+        GET_GOT_ENTRY_ADDR(got_plt_section_vaddr, got_plt_index) -
+        (GET_PLT_ENTRY_ADDR(plt_section_vaddr, plt_index) + 6) // push ocupa 6 bytes
+    );
+
+    plt[plt_index].offset_got = index_func; // indice de la funcion
+    plt[plt_index].offset_jmp_plt_got = (int32_t)(plt_section_vaddr - GET_PLT_ENTRY_ADDR(plt_section_vaddr, (plt_index + 1)));
+}
 
 
 #endif // CREATE_ELF_C
