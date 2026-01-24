@@ -62,12 +62,6 @@ int main() {
     // El encabezado ELF y los encabezados del programa ocupan la primera parte de la primera página.
     // Deberemos alinear la seccion .text, para eso, alineamos el desplazamiento actual,
     // hasta obtener el nuevo desplazamiento
-    if (current_file_offset % PAGE_SIZE != 0) {
-        size_t padding = PAGE_SIZE - (current_file_offset % PAGE_SIZE);
-        memset(b->mem + current_file_offset, 0, padding);
-        current_file_offset += padding;
-        b->size = current_file_offset; // Update builder's size to reflect padding
-    }
     b->size = align_file_offset_page(b->mem, current_file_offset, PAGE_SIZE);
 
     // añadir seccion .text
@@ -97,10 +91,8 @@ int main() {
     current_file_offset = b->size; // Update current_file_offset after adding .plt
 
 
-
     // Ensure the Read-Write sections (.data, .got.plt, .dynamic) start at a new page boundary.
     b->size = align_file_offset_page(b->mem, current_file_offset, PAGE_SIZE);
-
 
     // Calculate the end of the first (executable) segment in the file.
     // This segment will cover the ELF header, program headers, .text, and .plt.
@@ -127,7 +119,6 @@ int main() {
     uint64_t got_plt[5] = {0}; // Initialize all entries to 0
 
 
-
     size_t got_plt_section_off;
     uint64_t got_plt_section_vaddr;
     elf_builder_add_section_ex(
@@ -137,7 +128,6 @@ int main() {
         &got_plt_section_off, &got_plt_section_vaddr, 0, 0, 0
     );
     current_file_offset = b->size;
-
 
 
     // Patch the string address into the `mov rdi` instruction in the code.
@@ -174,36 +164,25 @@ int main() {
 
 
 
-    // Align before .dynsym (Dynamic Symbol Table), typically 8-byte aligned.
+    // alinear .dynsym (Dynamic Symbol Table), alinear a 8 bytes la seccion.
     b->size = align_file_offset_page(b->mem, current_file_offset, 8);
-    // Add .dynsym section
-    Elf64_Sym dynsym[3] = {0}; // Array for dynamic symbols
-    // dynsym[0]: Null symbol (mandatory first entry)
-    dynsym[0].st_name = 0; // el primero es null
-    dynsym[0].st_info = ELF64_ST_INFO(STB_LOCAL, STT_NOTYPE);
-    dynsym[0].st_shndx = SHN_UNDEF;
-    // dynsym[1]: printf symbol
-    // st_name = 1: offset in .dynstr for "printf" (which is after the initial null byte in dynstr[])
-    dynsym[1].st_name = dynstr_find_offset(dynstr, "printf"); // buscar donde empieza printf
-    dynsym[1].st_info = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC); // Global, Function type
-    dynsym[1].st_shndx = SHN_UNDEF; // Undefined section, resolved at runtime by dynamic linker
+    // añadir los simbolos a la seccion
+    size_t num_symbols;
+    Elf64_Sym* dynsym = build_dynsym(libs,
+                                     sizeof(libs) / sizeof(libs[0]),
+                                     dynstr,
+                                     &num_symbols);
 
-    printf("Offset printf in dynstr == %d\n", dynsym[1].st_name);
-
-    // dynsym[2]: puts symbol
-    // st_name = 1: offset in .dynstr for "puts"
-    dynsym[2].st_name = dynstr_find_offset(dynstr, "puts"); // obtenemos el offset para puts
-    dynsym[2].st_info = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC); // Global, Function type
-    dynsym[2].st_shndx = SHN_UNDEF; // Undefined section, resolved at runtime by dynamic linker
-    printf("Offset puts in dynstr == %d\n", dynsym[2].st_name);
-
-
+    // (Opcional) Verificar offsets
+    for (size_t i = 1; i < num_symbols; i++) {
+        printf("Symbol %zu: offset = %s\n", i, dynstr + dynsym[i].st_name);
+    }
 
     size_t dynsym_section_off;
     uint64_t dynsym_section_vaddr;
     size_t idx_dynsym = elf_builder_add_section_ex(
         b, ".dynsym", SHT_DYNSYM, SHF_ALLOC, // Type, Flags (Allocatable)
-        dynsym, sizeof(dynsym[0]) * 3 , // Data, Size
+        dynsym, num_symbols , // Data, Size
         base_vaddr + current_file_offset, 8, // Virtual Address, Alignment
         &dynsym_section_off, &dynsym_section_vaddr,
         idx_dynstr, // sh_link: link to .dynstr (for names)
@@ -213,29 +192,22 @@ int main() {
     current_file_offset = b->size;
 
 
-
-    // Align before .rela.plt (Relocation Entries with Addend for PLT), typically 8-byte aligned.
+    // rela.plt
     b->size = align_file_offset_page(b->mem, current_file_offset, 8);
-    // Add .rela.plt section
-    Elf64_Rela rela[2] = {0}; // Single relocation entry for printf
-    // r_offset: Virtual address of GOT[3] (where the resolved printf address will be stored)
-    rela[0].r_offset = got_plt_section_vaddr + 3 * 8;
-    // r_info: Combines symbol index (1 for printf) and relocation type (R_X86_64_JUMP_SLOT)
-    rela[0].r_info = ELF64_R_INFO(1, R_X86_64_JUMP_SLOT);
-    rela[0].r_addend = 0; // No addend typically for JUMP_SLOT
-
-    // r_offset: Virtual address of GOT[4] (where the resolved printf address will be stored)
-    rela[1].r_offset = got_plt_section_vaddr + 4 * 8;
-    // r_info: Combines symbol index (2 for puts) and relocation type (R_X86_64_JUMP_SLOT)
-    rela[1].r_info = ELF64_R_INFO(2, R_X86_64_JUMP_SLOT);
-    rela[1].r_addend = 0; // No addend typically for JUMP_SLOT
+    size_t num_functions = 0;
+    for (size_t i = 0; i < sizeof(libs)/sizeof(libs[0]); i++) {
+        num_functions += libs[i].numFunctions;
+    }
+    // Construir .rela.plt automáticamente
+    size_t num_rela;
+    Elf64_Rela* rela = build_rela_plt(got_plt_section_vaddr, 1, num_functions, &num_rela);
 
 
     size_t rela_plt_section_off;
     uint64_t rela_plt_section_vaddr;
     elf_builder_add_section_ex(
         b, ".rela.plt", SHT_RELA, SHF_ALLOC, // Type, Flags (Allocatable)
-        &rela, sizeof(rela[0]) * 2, // Data, Size
+        &rela, num_functions, // Data, Size
         base_vaddr + current_file_offset, 8, // Virtual Address, Alignment
         &rela_plt_section_off, &rela_plt_section_vaddr,
         idx_dynsym, // sh_link: link to .dynsym
@@ -290,7 +262,6 @@ int main() {
      */
     ((uint64_t *)(b->mem + got_plt_section_off))[3] = GET_PLT_ENTRY_ADDR(plt_section_vaddr, 1) + 6;
     ((uint64_t *)(b->mem + got_plt_section_off))[4] = GET_PLT_ENTRY_ADDR(plt_section_vaddr, 2) + 6;
-
 
 
 

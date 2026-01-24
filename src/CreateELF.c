@@ -609,4 +609,73 @@ size_t align_file_offset_page(void* mem, size_t current_file_offset, size_t size
     return current_file_offset;
 }
 
+/**
+ * Construye la tabla .dynsym dinámicamente a partir de las librerías importadas
+ *
+ * @param libs Array de librerías importadas
+ * @param num_libs Número de librerías
+ * @param dynstr Buffer de strings dinámicos (.dynstr)
+ * @param num_symbols [out] Recibe el número total de símbolos generados
+ * @return Elf64_Sym* Array de símbolos (debe ser liberado por el caller)
+ */
+Elf64_Sym* build_dynsym(ImportLibrary* libs, size_t num_libs,
+                         uint8_t* dynstr, size_t* num_symbols) {
+    // Contar el total de funciones
+    size_t total_functions = 0;
+    for (size_t i = 0; i < num_libs; i++) {
+        total_functions += libs[i].numFunctions;
+    }
+
+    // Reservar memoria (símbolo nulo + todas las funciones)
+    *num_symbols = 1 + total_functions;
+    Elf64_Sym* dynsym = calloc(*num_symbols, sizeof(Elf64_Sym));
+
+    // Símbolo nulo (obligatorio, índice 0)
+    dynsym[0].st_name = 0;
+    dynsym[0].st_info = ELF64_ST_INFO(STB_LOCAL, STT_NOTYPE);
+    dynsym[0].st_shndx = SHN_UNDEF;
+
+    // Rellenar símbolos para cada función
+    size_t symbol_index = 1;
+    for (size_t lib_idx = 0; lib_idx < num_libs; lib_idx++) {
+        for (size_t func_idx = 0; func_idx < libs[lib_idx].numFunctions; func_idx++) {
+            const char* func_name = libs[lib_idx].functions[func_idx];
+
+            dynsym[symbol_index].st_name = dynstr_find_offset(dynstr, func_name);
+            dynsym[symbol_index].st_info = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC);
+            dynsym[symbol_index].st_shndx = SHN_UNDEF;
+            dynsym[symbol_index].st_value = 0;
+            dynsym[symbol_index].st_size = 0;
+
+            symbol_index++;
+        }
+    }
+
+    return dynsym;
+}
+
+/**
+ * Construye la tabla .rela.plt a partir de las funciones importadas.
+ *
+ * @param got_plt_vaddr Dirección virtual base de .got.plt
+ * @param dynsym_start_idx Índice del primer símbolo importado en .dynsym (normalmente 1)
+ * @param num_functions Número total de funciones importadas
+ * @param num_rela [out] Recibe el número total de entradas .rela.plt
+ * @return Elf64_Rela* Array de relocalizaciones (debe ser liberado por el caller)
+ */
+Elf64_Rela* build_rela_plt(uint64_t got_plt_vaddr, size_t dynsym_start_idx,
+                           size_t num_functions, size_t* num_rela) {
+    *num_rela = num_functions;
+    Elf64_Rela* rela = calloc(*num_rela, sizeof(Elf64_Rela));
+    for (size_t i = 0; i < num_functions; i++) {
+        // GOT[3] para el primer símbolo importado, GOT[4] para el segundo, etc.
+        // (Asumiendo que GOT[0], GOT[1], GOT[2] son reservados)
+        rela[i].r_offset = got_plt_vaddr + (i + 3) * 8;
+        rela[i].r_info = ELF64_R_INFO(dynsym_start_idx + i, R_X86_64_JUMP_SLOT);
+        rela[i].r_addend = 0;
+    }
+    return rela;
+}
+
+
 #endif // CREATE_ELF_C

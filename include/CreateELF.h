@@ -307,7 +307,10 @@ void resolve_and_patch_got_plt(
 void print_dynstr(const char* dynstr, size_t length);
 char* join_string_libs_func(ImportLibrary* libs_with_funcs, size_t number_libs, size_t* size_output);
 size_t dynstr_find_offset(const char* dynstr, const char* target);
-
+Elf64_Sym* build_dynsym(ImportLibrary* libs, size_t num_libs,
+                         uint8_t* dynstr, size_t* num_symbols);
+Elf64_Rela* build_rela_plt(uint64_t got_plt_vaddr, size_t dynsym_start_idx,
+                           size_t num_functions, size_t* num_rela);
 // Libera todos los recursos asociados con el ElfBuilder
 void elf_builder_free(ElfBuilder *b);
 #endif // CREATE_ELF_H
