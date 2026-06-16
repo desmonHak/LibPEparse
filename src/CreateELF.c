@@ -677,5 +677,224 @@ Elf64_Rela* build_rela_plt(uint64_t got_plt_vaddr, size_t dynsym_start_idx,
     return rela;
 }
 
+/* =========================================================================
+ *  elf_create_shared64 -- emisor de .so (ET_DYN) position-independent
+ * ========================================================================= */
+
+/* Buffer de salida con append + alineacion (local a este emisor). */
+typedef struct { uint8_t *p; size_t len, cap; } ElfSoBuf;
+static int eso_reserve(ElfSoBuf *o, size_t extra) {
+    if (o->len + extra <= o->cap) return 1;
+    size_t nc = o->cap ? o->cap * 2 : 8192;
+    while (nc < o->len + extra) nc *= 2;
+    uint8_t *np = (uint8_t *)realloc(o->p, nc);
+    if (!np) return 0;
+    o->p = np; o->cap = nc; return 1;
+}
+static int eso_put(ElfSoBuf *o, const void *data, size_t n) {
+    if (!eso_reserve(o, n)) return 0;
+    if (n) { if (data) memcpy(o->p + o->len, data, n); else memset(o->p + o->len, 0, n); }
+    o->len += n; return 1;
+}
+static void eso_align(ElfSoBuf *o, size_t a) {
+    while (o->len % a) { uint8_t z = 0; eso_put(o, &z, 1); }
+}
+static void eso_seterr(char *e, size_t cap, const char *m) {
+    if (!e || !cap) return; size_t n = strlen(m); if (n >= cap) n = cap - 1;
+    memcpy(e, m, n); e[n] = 0;
+}
+
+int elf_create_shared64(const char *path,
+                        const ElfSharedSection *secs, int nsec,
+                        const ElfSharedReloc *relocs, int nrel,
+                        const ElfSharedExport *exps, int nexp,
+                        char *errbuf, size_t errcap) {
+    if (nsec <= 0) { eso_seterr(errbuf, errcap, "elf_create_shared64: sin secciones"); return 0; }
+    for (int r = 0; r < nrel; ++r) {
+        if (relocs[r].is_abs64) {
+            eso_seterr(errbuf, errcap, "elf_create_shared64: ABS64 no soportado en .so (usa PIC)");
+            return 0;
+        }
+        if (relocs[r].site_sec < 0 || relocs[r].site_sec >= nsec ||
+            relocs[r].target_sec < 0 || relocs[r].target_sec >= nsec) {
+            eso_seterr(errbuf, errcap, "elf_create_shared64: reloc con seccion fuera de rango");
+            return 0;
+        }
+    }
+
+    /* Section header indices: 0=NULL, 1..nsec user, +.dynsym,.dynstr,.hash,
+     * .dynamic,.shstrtab. */
+    const int dynsym_sh = 1 + nsec;
+    const int dynstr_sh = dynsym_sh + 1;
+    const int hash_sh   = dynstr_sh + 1;
+    const int dyn_sh    = hash_sh + 1;
+    const int shstr_sh  = dyn_sh + 1;
+    const int shnum     = shstr_sh + 1;
+
+    /* .dynstr + .dynsym (export symbols).  sym[0] = null. */
+    ElfSoBuf dynstr; memset(&dynstr, 0, sizeof(dynstr));
+    { uint8_t z = 0; eso_put(&dynstr, &z, 1); }
+    const int nsym = 1 + nexp;
+    Elf64_Sym *dynsym = (Elf64_Sym *)calloc((size_t)nsym, sizeof(Elf64_Sym));
+
+    /* .shstrtab + nombres de seccion. */
+    ElfSoBuf shstr; memset(&shstr, 0, sizeof(shstr));
+    { uint8_t z = 0; eso_put(&shstr, &z, 1); }
+    uint32_t *sec_nameoff = (uint32_t *)calloc((size_t)nsec, sizeof(uint32_t));
+    for (int i = 0; i < nsec; ++i) {
+        sec_nameoff[i] = (uint32_t)shstr.len;
+        eso_put(&shstr, secs[i].name, strlen(secs[i].name) + 1);
+    }
+    uint32_t no_dynsym = (uint32_t)shstr.len; eso_put(&shstr, ".dynsym", 8);
+    uint32_t no_dynstr = (uint32_t)shstr.len; eso_put(&shstr, ".dynstr", 8);
+    uint32_t no_hash   = (uint32_t)shstr.len; eso_put(&shstr, ".hash", 6);
+    uint32_t no_dyn    = (uint32_t)shstr.len; eso_put(&shstr, ".dynamic", 9);
+    uint32_t no_shstr  = (uint32_t)shstr.len; eso_put(&shstr, ".shstrtab", 10);
+
+    /* Construir el fichero.  Mapeo vaddr = offset (identidad). */
+    ElfSoBuf out; memset(&out, 0, sizeof(out));
+    Elf64_Ehdr eh; memset(&eh, 0, sizeof(eh));
+    eh.e_ident[0]=0x7f; eh.e_ident[1]='E'; eh.e_ident[2]='L'; eh.e_ident[3]='F';
+    eh.e_ident[4]=2; eh.e_ident[5]=1; eh.e_ident[6]=1;
+    eh.e_type = ET_DYN; eh.e_machine = EM_X86_64; eh.e_version = 1;
+    eh.e_ehsize = (Elf64_Half)sizeof(Elf64_Ehdr);
+    eh.e_phentsize = (Elf64_Half)sizeof(Elf64_Phdr);
+    eh.e_phnum = 3;  /* PT_LOAD + PT_DYNAMIC + PT_GNU_STACK */
+    eh.e_phoff = sizeof(Elf64_Ehdr);
+    eh.e_shentsize = (Elf64_Half)sizeof(Elf64_Shdr);
+    eh.e_shnum = (Elf64_Half)shnum;
+    eh.e_shstrndx = (Elf64_Half)shstr_sh;
+    eso_put(&out, &eh, sizeof(eh));
+    /* Reservar espacio de los 3 phdrs (se rellenan al final). */
+    size_t phoff = out.len;
+    { Elf64_Phdr zp; memset(&zp, 0, sizeof(zp));
+      eso_put(&out, &zp, sizeof(zp)); eso_put(&out, &zp, sizeof(zp));
+      eso_put(&out, &zp, sizeof(zp)); }
+
+    /* Secciones de usuario (vaddr = offset). */
+    uint64_t *sec_off = (uint64_t *)calloc((size_t)nsec, sizeof(uint64_t));
+    for (int i = 0; i < nsec; ++i) {
+        eso_align(&out, 16);
+        sec_off[i] = out.len;
+        eso_put(&out, secs[i].data, secs[i].size);
+    }
+    /* Aplicar relocs REL32 (PC-relativas). */
+    for (int r = 0; r < nrel; ++r) {
+        const ElfSharedReloc *rl = &relocs[r];
+        uint64_t site_va = sec_off[rl->site_sec] + rl->site_off;
+        uint64_t tgt_va  = sec_off[rl->target_sec] + rl->target_off;
+        int32_t rel = (int32_t)((int64_t)tgt_va - (int64_t)site_va - 4);
+        uint8_t *p = out.p + sec_off[rl->site_sec] + rl->site_off;
+        p[0]=(uint8_t)rel; p[1]=(uint8_t)(rel>>8); p[2]=(uint8_t)(rel>>16); p[3]=(uint8_t)(rel>>24);
+    }
+
+    /* .dynsym (st_value = vaddr de cada export). */
+    for (int g = 0; g < nexp; ++g) {
+        Elf64_Sym *s = &dynsym[1 + g];
+        s->st_name  = (Elf64_Word)dynstr.len;
+        eso_put(&dynstr, exps[g].name, strlen(exps[g].name) + 1);
+        s->st_info  = ELF64_ST_INFO(STB_GLOBAL, exps[g].is_func ? STT_FUNC : STT_OBJECT);
+        s->st_shndx = (Elf64_Half)(1 + exps[g].sec);
+        s->st_value = sec_off[exps[g].sec] + exps[g].off;
+    }
+    eso_align(&out, 8);
+    uint64_t dynsym_off = out.len;
+    eso_put(&out, dynsym, (size_t)nsym * sizeof(Elf64_Sym));
+    uint64_t dynstr_off = out.len;
+    eso_put(&out, dynstr.p, dynstr.len);
+
+    /* .hash SysV: 1 bucket; cadena lineal sobre todos los simbolos. */
+    eso_align(&out, 8);
+    uint64_t hash_off = out.len;
+    { uint32_t nb = 1, nc = (uint32_t)nsym;
+      eso_put(&out, &nb, 4); eso_put(&out, &nc, 4);
+      uint32_t bucket0 = (nsym > 1) ? 1u : 0u; eso_put(&out, &bucket0, 4);
+      for (int i = 0; i < nsym; ++i) {
+          uint32_t chain = (i + 1 < nsym) ? (uint32_t)(i + 1) : 0u;
+          eso_put(&out, &chain, 4);
+      } }
+    uint64_t hash_size = out.len - hash_off;
+
+    /* .dynamic. */
+    eso_align(&out, 8);
+    uint64_t dyn_off = out.len;
+    { Elf64_Dyn d;
+      #define ESO_DYN(tag, val) do { d.d_tag = (tag); d.d_un.d_val = (uint64_t)(val); eso_put(&out, &d, sizeof(d)); } while (0)
+      ESO_DYN(DT_HASH, hash_off);
+      ESO_DYN(DT_STRTAB, dynstr_off);
+      ESO_DYN(DT_SYMTAB, dynsym_off);
+      ESO_DYN(DT_STRSZ, dynstr.len);
+      ESO_DYN(DT_SYMENT, sizeof(Elf64_Sym));
+      ESO_DYN(DT_NULL, 0);
+      #undef ESO_DYN
+    }
+    uint64_t dyn_size = out.len - dyn_off;
+
+    /* .shstrtab. */
+    uint64_t shstr_off = out.len;
+    eso_put(&out, shstr.p, shstr.len);
+
+    uint64_t load_end = out.len;  /* PT_LOAD cubre [0, load_end). */
+
+    /* Tabla de section headers. */
+    eso_align(&out, 8);
+    uint64_t shoff = out.len;
+    Elf64_Shdr *shdr = (Elf64_Shdr *)calloc((size_t)shnum, sizeof(Elf64_Shdr));
+    for (int i = 0; i < nsec; ++i) {
+        Elf64_Shdr *s = &shdr[1 + i];
+        s->sh_name = sec_nameoff[i]; s->sh_type = SHT_PROGBITS;
+        s->sh_flags = secs[i].sh_flags ? secs[i].sh_flags : SHF_ALLOC;
+        s->sh_addr = sec_off[i]; s->sh_offset = sec_off[i]; s->sh_size = secs[i].size;
+        s->sh_addralign = (secs[i].sh_flags & SHF_EXECINSTR) ? 16 : 8;
+    }
+    { Elf64_Shdr *s = &shdr[dynsym_sh];
+      s->sh_name = no_dynsym; s->sh_type = SHT_DYNSYM; s->sh_flags = SHF_ALLOC;
+      s->sh_addr = dynsym_off; s->sh_offset = dynsym_off;
+      s->sh_size = (uint64_t)nsym * sizeof(Elf64_Sym);
+      s->sh_link = (Elf64_Word)dynstr_sh; s->sh_info = 1;
+      s->sh_addralign = 8; s->sh_entsize = sizeof(Elf64_Sym); }
+    { Elf64_Shdr *s = &shdr[dynstr_sh];
+      s->sh_name = no_dynstr; s->sh_type = SHT_STRTAB; s->sh_flags = SHF_ALLOC;
+      s->sh_addr = dynstr_off; s->sh_offset = dynstr_off; s->sh_size = dynstr.len;
+      s->sh_addralign = 1; }
+    { Elf64_Shdr *s = &shdr[hash_sh];
+      s->sh_name = no_hash; s->sh_type = SHT_HASH; s->sh_flags = SHF_ALLOC;
+      s->sh_addr = hash_off; s->sh_offset = hash_off; s->sh_size = hash_size;
+      s->sh_link = (Elf64_Word)dynsym_sh; s->sh_addralign = 8; s->sh_entsize = 4; }
+    { Elf64_Shdr *s = &shdr[dyn_sh];
+      s->sh_name = no_dyn; s->sh_type = SHT_DYNAMIC; s->sh_flags = SHF_ALLOC | SHF_WRITE;
+      s->sh_addr = dyn_off; s->sh_offset = dyn_off; s->sh_size = dyn_size;
+      s->sh_link = (Elf64_Word)dynstr_sh; s->sh_addralign = 8; s->sh_entsize = sizeof(Elf64_Dyn); }
+    { Elf64_Shdr *s = &shdr[shstr_sh];
+      s->sh_name = no_shstr; s->sh_type = SHT_STRTAB;
+      s->sh_offset = shstr_off; s->sh_size = shstr.len; s->sh_addralign = 1; }
+    eso_put(&out, shdr, (size_t)shnum * sizeof(Elf64_Shdr));
+
+    /* Rellenar ehdr.e_shoff + los 2 program headers. */
+    ((Elf64_Ehdr *)out.p)->e_shoff = shoff;
+    Elf64_Phdr *ph = (Elf64_Phdr *)(out.p + phoff);
+    ph[0].p_type = PT_LOAD; ph[0].p_flags = PF_R | PF_W | PF_X;
+    ph[0].p_offset = 0; ph[0].p_vaddr = 0; ph[0].p_paddr = 0;
+    ph[0].p_filesz = load_end; ph[0].p_memsz = load_end; ph[0].p_align = 0x1000;
+    ph[1].p_type = PT_DYNAMIC; ph[1].p_flags = PF_R | PF_W;
+    ph[1].p_offset = dyn_off; ph[1].p_vaddr = dyn_off; ph[1].p_paddr = dyn_off;
+    ph[1].p_filesz = dyn_size; ph[1].p_memsz = dyn_size; ph[1].p_align = 8;
+    /* PT_GNU_STACK (R+W, NO ejecutable): sin el, el loader asume stack
+     * ejecutable y dlopen falla en sistemas endurecidos. */
+    ph[2].p_type = 0x6474e551u; ph[2].p_flags = PF_R | PF_W;
+    ph[2].p_offset = 0; ph[2].p_vaddr = 0; ph[2].p_paddr = 0;
+    ph[2].p_filesz = 0; ph[2].p_memsz = 0; ph[2].p_align = 0x10;
+
+    int ok = 1;
+    FILE *f = fopen(path, "wb");
+    if (!f) { eso_seterr(errbuf, errcap, "elf_create_shared64: fopen fallo"); ok = 0; }
+    else { size_t w = fwrite(out.p, 1, out.len, f); fclose(f);
+           if (w != out.len) { eso_seterr(errbuf, errcap, "elf_create_shared64: escritura incompleta"); ok = 0; } }
+
+    free(dynsym); free(dynstr.p); free(shstr.p); free(sec_nameoff);
+    free(sec_off); free(shdr); free(out.p);
+    return ok;
+}
+
 
 #endif // CREATE_ELF_C

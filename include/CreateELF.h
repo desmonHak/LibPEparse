@@ -313,4 +313,51 @@ Elf64_Rela* build_rela_plt(uint64_t got_plt_vaddr, size_t dynsym_start_idx,
                            size_t num_functions, size_t* num_rela);
 // Libera todos los recursos asociados con el ElfBuilder
 void elf_builder_free(ElfBuilder *b);
+
+/* =========================================================================
+ *  Emisor de libreria compartida ELF64 (.so, ET_DYN)
+ *
+ *  Genera un objeto compartido POSITION-INDEPENDENT: el mapeo es vaddr=offset
+ *  (identidad) con un unico PT_LOAD (R+W+X) + PT_DYNAMIC.  Las relocs internas
+ *  REL32 (RIP-relativas) se APLICAN al emitir (su desplazamiento es invariante
+ *  bajo la base de carga), por lo que NO se generan relocs dinamicas.  Los
+ *  simbolos se exportan en .dynsym + .hash + .dynamic, de forma que el cargador
+ *  dinamico (dlopen/dlsym) los resuelva.  ABS64 no se soporta (requeriria
+ *  R_X86_64_RELATIVE dinamicas).
+ * ========================================================================= */
+
+/** @brief Seccion de entrada para @c elf_create_shared64. */
+typedef struct {
+    const char    *name;      /* ".text", ".rodata", ... */
+    uint64_t       sh_flags;  /* SHF_ALLOC | SHF_EXECINSTR | SHF_WRITE */
+    const uint8_t *data;      /* bytes de la seccion */
+    uint32_t       size;      /* tamano */
+} ElfSharedSection;
+
+/** @brief Relocation interna (PC-relativa) a aplicar en el .so. */
+typedef struct {
+    int      site_sec;    /* seccion donde parchear */
+    uint64_t site_off;    /* offset del campo */
+    int      target_sec;  /* seccion objetivo */
+    uint64_t target_off;  /* offset dentro del target */
+    int      is_abs64;    /* 0 = REL32 (rip-rel, aplicada); 1 = ABS64 (no soportado) */
+} ElfSharedReloc;
+
+/** @brief Simbolo GLOBAL exportado por el .so. */
+typedef struct {
+    const char *name;
+    int      sec;       /* seccion donde vive */
+    uint64_t off;       /* offset dentro de la seccion */
+    int      is_func;   /* 1 = STT_FUNC, 0 = STT_OBJECT */
+} ElfSharedExport;
+
+/**
+ * @brief Emite un .so ET_DYN a disco.
+ * @return 1 en exito, 0 en error (con @p errbuf relleno si != NULL).
+ */
+int elf_create_shared64(const char *path,
+                        const ElfSharedSection *secs, int nsec,
+                        const ElfSharedReloc *relocs, int nrel,
+                        const ElfSharedExport *exps, int nexp,
+                        char *errbuf, size_t errcap);
 #endif // CREATE_ELF_H
