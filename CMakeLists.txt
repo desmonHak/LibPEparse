@@ -1,200 +1,76 @@
-cmake_minimum_required(VERSION 3.31)
+cmake_minimum_required(VERSION 3.15)
 project(LibPEparse C)
 
-set(CMAKE_C_STANDARD 11)
+# =============================================================================
+#  LibPEparse -- libreria generica en C puro para PARSEAR y EMITIR formatos de
+#  objeto/ejecutable: PE/COFF (Windows) y ELF (Linux).
+#
+#  Disenada para reutilizarse en CUALQUIER proyecto C o C++ (no depende de
+#  VestaVM ni de windows.h: los tipos ___IMAGE_* son propios).  Se consume de
+#  dos formas:
+#
+#    1) Standalone:   cmake .. && make           (compila tambien los ejemplos)
+#    2) Subdirectorio: add_subdirectory(LibPEparse)
+#                      target_link_libraries(mi_target PRIVATE LibPEparse)
+#       (los ejemplos quedan OFF por defecto para no contaminar el build padre)
+# =============================================================================
 
-# Permitir establecer modo Debug o Release
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+# Detecta si se compila standalone (proyecto raiz) o como subdirectorio.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(_LIBPEPARSE_IS_TOPLEVEL ON)
+else()
+    set(_LIBPEPARSE_IS_TOPLEVEL OFF)
+endif()
+
+option(LIBPEPARSE_BUILD_EXAMPLES
+       "Compilar los ejecutables de ejemplo (code1/coff/elf/main)"
+       ${_LIBPEPARSE_IS_TOPLEVEL})
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 endif()
 
-# Configuraciones específicas por tipo de compilación
-set(CMAKE_C_FLAGS_DEBUG "-g -O0 -Wall -DDEBUG_ENABLE -Wpedantic -D_ExceptionHandler")
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -D_ExceptionHandler")
-
-include_directories(include)
-
-# example/code1.c
-add_executable(code1
-        include/LibCOFFparse.h
-        include/LibELFparse.h
-        include/LibPEparse.h
-        include/UtilsC.h
-        include/CreateELF.h
-        src/LibCOFFparse.c
+# -----------------------------------------------------------------------------
+#  Libreria estatica reutilizable
+# -----------------------------------------------------------------------------
+set(LIBPEPARSE_SOURCES
         src/LibPEparse.c
+        src/LibCOFFparse.c
         src/LibELFparse.c
-        src/UtilsC.c
-        src/CreateELF.c
-        example/code1.c
-        include/RelocsELF/RelocsELF.h
-        include/RelocsELF/M68k.h
-        include/RelocsELF/x86_64.h
-        include/RelocsELF/i386.h
-        include/RelocsELF/Mips.h
-        include/RelocsELF/AArch64.h
-        include/RelocsELF/ARM.h
-        include/RelocsELF/ARC.h
-        include/RelocsELF/AVR.h
-        include/RelocsELF/Hexagon.h
-        include/RelocsELF/Lanai.h
-        include/RelocsELF/PowerPC.h
-        include/RelocsELF/PowerPc64.h
-        include/RelocsELF/RISCV.h
-        include/RelocsELF/SystemZ.h
-        include/RelocsELF/Sparc.h
-        include/RelocsELF/AMDGPU.h
-        include/RelocsELF/BPF.h
-        include/RelocsELF/MSP430.h
-        include/RelocsELF/VE.h
-        include/RelocsELF/CSKY.h
-        include/RelocsELF/LoongArch.h
-        include/RelocsELF/Xtensa.h)
-
-# example/code2.c
-add_executable(code2
-        include/CreatePe.h
-        include/LibCOFFparse.h
-        include/LibELFparse.h
-        include/LibPEparse.h
-        include/UtilsC.h
-        include/CreateELF.h
         src/CreatePe.c
-        src/LibCOFFparse.c
-        src/LibELFparse.c
-        src/LibPEparse.c
-        src/UtilsC.c
         src/CreateELF.c
-        example/code2.c)
-
-# example/coff1.c
-add_executable(coff1
-        include/CreatePe.h
-        include/LibCOFFparse.h
-        include/LibELFparse.h
-        include/LibPEparse.h
-        include/UtilsC.h
-        include/CreateELF.h
-        src/CreatePe.c
-        src/LibCOFFparse.c
-        src/LibELFparse.c
-        src/LibPEparse.c
         src/UtilsC.c
-        src/CreateELF.c
-        example/coff1.c)
+)
 
-# example/coff2.c
-add_executable(coff2
-        include/CreatePe.h
-        include/LibCOFFparse.h
-        include/LibELFparse.h
-        include/LibPEparse.h
-        include/UtilsC.h
-        include/CreateELF.h
-        src/CreatePe.c
-        src/LibCOFFparse.c
-        src/LibELFparse.c
-        src/LibPEparse.c
-        src/UtilsC.c
-        src/CreateELF.c
-        example/coff2.c)
+add_library(LibPEparse STATIC ${LIBPEPARSE_SOURCES})
 
-# example/coff3.c
-add_executable(coff3
-        include/CreatePe.h
-        include/LibCOFFparse.h
-        include/LibELFparse.h
-        include/LibPEparse.h
-        include/UtilsC.h
-        include/CreateELF.h
-        src/CreatePe.c
-        src/LibCOFFparse.c
-        src/LibELFparse.c
-        src/LibPEparse.c
-        src/UtilsC.c
-        src/CreateELF.c
-        example/coff3.c)
+# El directorio include/ se propaga a quien enlace la lib (PUBLIC) para que
+# CreatePe.h / CreateELF.h / LibCOFFparse.h sean visibles sin rutas manuales.
+target_include_directories(LibPEparse PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 
-if (MSVC)
-    # warning level 4
-    add_compile_options(/W4)
+# Alias con namespace para consumo idiomatico (target_link_libraries Vesta::PEparse).
+add_library(Vesta::PEparse ALIAS LibPEparse)
+
+if(MSVC)
+    target_compile_options(LibPEparse PRIVATE /W3)
 else()
-    # additional warnings
-    add_compile_options(
-            -Wall -Wextra -Wpedantic -g -O0
-    )
+    target_compile_options(LibPEparse PRIVATE -Wall -Wextra)
 endif()
-# example/main.c
-add_executable(main
-        include/CreatePe.h
-        include/LibCOFFparse.h
-        include/LibELFparse.h
-        include/LibPEparse.h
-        include/UtilsC.h
-        include/CreateELF.h
-        src/CreatePe.c
-        src/LibCOFFparse.c
-        src/LibELFparse.c
-        src/LibPEparse.c
-        src/UtilsC.c
-        src/CreateELF.c
-        example/main.c)
 
-# example/elf1.c
-add_executable(elf1
-        include/CreatePe.h
-        include/LibCOFFparse.h
-        include/LibELFparse.h
-        include/LibPEparse.h
-        include/UtilsC.h
-        include/CreateELF.h
-        src/CreatePe.c
-        src/LibCOFFparse.c
-        src/LibELFparse.c
-        src/LibPEparse.c
-        src/UtilsC.c
-        src/CreateELF.c
-        example/elf1.c)
-add_executable(elf2
-        include/CreatePe.h
-        include/LibCOFFparse.h
-        include/LibELFparse.h
-        include/LibPEparse.h
-        include/UtilsC.h
-        include/CreateELF.h
-        src/CreatePe.c
-        src/LibCOFFparse.c
-        src/LibELFparse.c
-        src/LibPEparse.c
-        src/UtilsC.c
-        src/CreateELF.c
-        example/elf2.c)
-add_executable(elf3
-        include/CreatePe.h
-        include/LibCOFFparse.h
-        include/LibELFparse.h
-        include/LibPEparse.h
-        include/UtilsC.h
-        include/CreateELF.h
-        src/CreatePe.c
-        src/LibCOFFparse.c
-        src/LibELFparse.c
-        src/LibPEparse.c
-        src/UtilsC.c
-        src/CreateELF.c
-        example/elf3.c)
-
-add_executable(elf4
-        include/CreatePe.h
-        include/LibCOFFparse.h
-        include/LibELFparse.h
-        include/LibPEparse.h
-        include/UtilsC.h
-        include/CreateELF.h
-        src/CreatePe.c
-        src/LibCOFFparse.c
-        src/LibELFparse.c
-        src/LibPEparse.c
-        src/UtilsC.c
-        src/CreateELF.c
-        example/elf4.c)
+# -----------------------------------------------------------------------------
+#  Ejemplos (solo si LIBPEPARSE_BUILD_EXAMPLES=ON; OFF como subdirectorio)
+#
+#  OJO: el ejemplo se llama "main" -> si se construyera dentro de un proyecto
+#  padre chocaria con otros targets; por eso van gated.
+# -----------------------------------------------------------------------------
+if(LIBPEPARSE_BUILD_EXAMPLES)
+    foreach(_ex code1 code2 coff1 coff2 coff3 main elf1 elf2 elf3 elf4)
+        add_executable(${_ex} example/${_ex}.c)
+        target_link_libraries(${_ex} PRIVATE LibPEparse)
+    endforeach()
+endif()

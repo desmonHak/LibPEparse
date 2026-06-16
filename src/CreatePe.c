@@ -273,10 +273,20 @@ _BYTE* buildMultiIdataSectionWithOffsets(
             iltArray[j] = idataRVA + hintNameOffset;
             iatArray[j] = idataRVA + hintNameOffset;
 
-            // Guardar offset relativo al inicio de la IAT
+            // Offset de la entrada IAT de esta funcion RELATIVO al inicio de
+            // la seccion .idata (es decir, relativo a idataRVA).  El llamador
+            // obtiene la direccion virtual de la entrada con:
+            //     VA = imageBase + idataRVA + offset
+            // y, por tanto, pasa a parchearDesplazamientosPorOffset:
+            //     direccionIAT = imageBase + idataRVA   (base de .idata)
+            //     offset_iat   = offsets[k].offset
+            // Antes esta linea restaba iltIatOffset y sumaba un "+4" sin
+            // justificacion (con "¿+4?"), lo que
+            // producia una VA de IAT incorrecta.  Corregido: el offset es
+            // simplemente la posicion del thunk IAT dentro del buffer .idata.
             offsets[offsetIdx].dllName = libs[i].dllName;
             offsets[offsetIdx].functionName = libs[i].functions[j];
-            offsets[offsetIdx].offset = (thisIAT + j * sizeof(_QWORD)) - iltIatOffset + 4/*¿+4?*/;
+            offsets[offsetIdx].offset = (int)(thisIAT + (_DWORD)j * (_DWORD)sizeof(_QWORD));
             offsetIdx++;
 
             // Escribir Hint/Name

@@ -60,19 +60,24 @@ int main() {
     free(idataBuffer);
 
     // necesario para la seccion .idata y la IAT
+    // El directorio IMPORT cubre (numLibs + 1) descriptores (incluye el
+    // terminador nulo); antes usaba "* 2" fijo, incorrecto para != 1 libs.
     pe.ntHeaders.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress = idataRVA;
     pe.ntHeaders.OptionalHeader.DataDirectory[
-        ___IMAGE_DIRECTORY_ENTRY_IMPORT].Size = sizeof(___IMAGE_IMPORT_DESCRIPTOR) * 2;
-    pe.ntHeaders.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_IAT].VirtualAddress = idataRVA + 
-        sizeof(___IMAGE_IMPORT_DESCRIPTOR) * 2 + sizeof(_QWORD) * 2;
-    pe.ntHeaders.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_IAT].Size = sizeof(_QWORD) * 2;
+        ___IMAGE_DIRECTORY_ENTRY_IMPORT].Size = sizeof(___IMAGE_IMPORT_DESCRIPTOR) * (numLibs + 1);
+    // La IAT empieza en la primera entrada de thunk (offsets[0].offset es ya
+    // relativo a idataRVA tras la correccion en buildMultiIdataSectionWithOffsets).
+    pe.ntHeaders.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_IAT].VirtualAddress =
+        idataRVA + offsets[0].offset;
+    pe.ntHeaders.OptionalHeader.DataDirectory[___IMAGE_DIRECTORY_ENTRY_IAT].Size = sizeof(_QWORD) * numOffsets;
 
     // 3. Corregir el target del call en .text
     uint8_t* codigoTexto = pe.sectionData[textIndex];
     size_t tamanoCodigoTexto = pe.sectionHeaders[textIndex].Misc.VirtualSize;
     uint64_t baseVirtualTexto = pe.sectionHeaders[textIndex].VirtualAddress + pe.ntHeaders.OptionalHeader.ImageBase;
-    uint64_t direccionIAT = pe.ntHeaders.OptionalHeader.DataDirectory[
-        ___IMAGE_DIRECTORY_ENTRY_IAT].VirtualAddress + pe.ntHeaders.OptionalHeader.ImageBase;
+    // offset_iat es ahora relativo a idataRVA, asi que la base que se pasa a
+    // parchearDesplazamientosPorOffset es la VA del inicio de .idata.
+    uint64_t direccionIAT = pe.ntHeaders.OptionalHeader.ImageBase + idataRVA;
 
     //FunctionOffset stack_functions_offsets[] = {
     //    // 10 bytes (descriptor de KERNEL32.dll) +
@@ -103,10 +108,14 @@ int main() {
     printf("Parcheando %p con %s\n", baseVirtualTexto + 24, offsets[2].functionName);
 
     // la segunda llamada(stack_functions_offsets[1]) sera ExitProcess(offsets[0])
+    // El call `FF 15` de ExitProcess empieza en el offset 33 del codigo (no 34):
+    //   /*33*/ 0xFF,0x15,0x00,0x00,0x00,0x00
+    // parchearDesplazamientosPorOffset escribe el disp32 en off+2 (=35) y usa
+    // off+6 como RIP siguiente.  Con 34 se corrompia la instruccion.
     stack_functions_offsets[1].offset_iat   = offsets[0].offset;
     stack_functions_offsets[1].name         = offsets[0].functionName;
-    stack_functions_offsets[1].offset_code  = 34; // parchear la direccion offset 34
-    printf("Parcheando %p con %s\n", baseVirtualTexto + 34, offsets[0].functionName);
+    stack_functions_offsets[1].offset_code  = 33; // call ExitProcess en offset 33
+    printf("Parcheando %p con %s\n", baseVirtualTexto + 33, offsets[0].functionName);
 
 
     parchearDesplazamientosPorOffset(codigoTexto, tamanoCodigoTexto,

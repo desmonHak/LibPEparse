@@ -8,7 +8,13 @@
 #include <string.h>
 #include <stdint.h>
 #include <inttypes.h>
+/* stdatomic.h no se usa en esta cabecera ni en su .c; se incluye solo bajo C
+ * (en C++ no existe <stdatomic.h> y rompia la inclusion desde TUs C++).
+ * Mantenido por compatibilidad con consumidores C que dependieran del
+ * include transitivo. */
+#ifndef __cplusplus
 #include <stdatomic.h>
+#endif
 
 // para parametros que no se usaran bajo ciertas circustancias
 #ifndef UNUSED_ARG
