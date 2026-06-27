@@ -404,6 +404,20 @@ void finalizePE64File(PE64FILE_struct* pe) {
     pe->ntHeaders.OptionalHeader.SizeOfHeaders = align(sizeof(___IMAGE_DOS_HEADER) + sizeof(___IMAGE_NT_HEADERS64) +
                                                          (pe->numberOfSections * sizeof(___IMAGE_SECTION_HEADER)),
                                                          FILE_ALIGN);
+    /* Recomputar PointerToRawData de TODAS las secciones con el SizeOfHeaders
+     * FINAL.  addSection fijaba el raw-ptr de la 1a seccion usando el conteo de
+     * secciones PARCIAL (1), pero al anadir mas secciones despues el header
+     * crece y SizeOfHeaders puede superar ese raw-ptr -> los datos de la 1a
+     * seccion solapaban la tabla de section headers en el fichero (corrompiendo
+     * el header de la ultima seccion -> .idata con RVA/contenido basura ->
+     * imports rotos -> crash al cargar).  Encadenamos desde SizeOfHeaders. */
+    {
+        _DWORD raw = pe->ntHeaders.OptionalHeader.SizeOfHeaders;
+        for (int i = 0; i < pe->numberOfSections; i++) {
+            pe->sectionHeaders[i].PointerToRawData = raw;
+            raw = align(raw + pe->sectionHeaders[i].SizeOfRawData, FILE_ALIGN);
+        }
+    }
     pe->ntHeaders.OptionalHeader.AddressOfEntryPoint = pe->sectionHeaders[0].VirtualAddress;
     pe->ntHeaders.OptionalHeader.BaseOfCode = pe->sectionHeaders[0].VirtualAddress;
     pe->ntHeaders.OptionalHeader.SizeOfCode = 0;
