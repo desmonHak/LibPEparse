@@ -514,6 +514,11 @@ void ParseSectionHeaders64(PE64FILE * peFile);
 void PrintSectionHeadersInfo64(PE64FILE * peFile);
 void ParseImportDirectory64(PE64FILE * peFile);
 void PrintImportTableInfo64(PE64FILE * peFile);
+// Lee los nombres exportados de un PE ya parseado (ParseFile64).  Devuelve un
+// array char** (calloc'd, cada string malloc'd) con *count entradas, liberable
+// con FreeExportNames64; NULL si el PE no tiene tabla de exports.
+char** ParseExportNames64(PE64FILE* peFile, int* count);
+void FreeExportNames64(char** names, int count);
 void ParseBaseReloc64(PE64FILE * peFile);
 void PrintBaseRelocationsInfo64(PE64FILE * peFile);
 _DWORD align(_DWORD size, _DWORD alignment);

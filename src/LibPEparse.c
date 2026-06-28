@@ -80,7 +80,7 @@ void PE64FILE_PrintInfo64(PE64FILE* peFile) {
 
 void ParseFile64(PE64FILE* peFile) {
 
-    if (peFile) {
+    if (peFile == NULL) {
         printf("ParseFile64 -> peFile == NULL\n");
         return;
     }
@@ -165,11 +165,11 @@ int INITPARSE(FILE* PpeFile) {
 
 }
 void ParseDOSHeader64(PE64FILE* peFile) {
-    if (peFile) {
+    if (peFile == NULL) {
         printf("ParseDOSHeader64 -> peFile == NULL\n");
         return;
     }
-    if (peFile->Ppefile) {
+    if (peFile->Ppefile == NULL) {
         printf("ParseDOSHeader64 -> peFile->Ppefile == NULL\n");
         return;
     }
@@ -724,6 +724,72 @@ void PrintImportTableInfo64(PE64FILE * peFile) {
 
     }
 
+}
+
+// Lee los NOMBRES exportados de un PE ya parseado (ParseFile64).  Recorre la
+// IMAGE_EXPORT_DIRECTORY: NumberOfNames (+24) + AddressOfNames (+32, RVA a un
+// array de RVAs de nombres NUL-terminados).  Usa resolve64/locate64 para
+// convertir cada RVA a offset de fichero y lee de Ppefile.  Devuelve un array
+// char** (calloc'd; cada string malloc'd) con *count entradas; el llamador lo
+// libera con FreeExportNames64.  Devuelve NULL si no hay tabla de exports.
+char** ParseExportNames64(PE64FILE* peFile, int* count) {
+    if (count) *count = 0;
+    if (peFile == NULL || peFile->Ppefile == NULL) return NULL;
+    _DWORD exp_rva = peFile->PEFILE_EXPORT_DIRECTORY.VirtualAddress;
+    if (exp_rva == 0) return NULL;
+    _DWORD exp_off = resolve64(peFile, exp_rva, locate64(peFile, exp_rva));
+    if (exp_off == 0) return NULL;
+
+    _DWORD numberOfNames = 0, addressOfNames = 0;
+    fseek(peFile->Ppefile, (long)(exp_off + 24), SEEK_SET);
+    if (fread(&numberOfNames, sizeof(_DWORD), 1, peFile->Ppefile) != 1)
+        return NULL;
+    fseek(peFile->Ppefile, (long)(exp_off + 32), SEEK_SET);
+    if (fread(&addressOfNames, sizeof(_DWORD), 1, peFile->Ppefile) != 1)
+        return NULL;
+    if (numberOfNames == 0 || addressOfNames == 0) return NULL;
+
+    _DWORD names_off =
+        resolve64(peFile, addressOfNames, locate64(peFile, addressOfNames));
+    if (names_off == 0) return NULL;
+
+    char** names = (char**)calloc(numberOfNames, sizeof(char*));
+    if (names == NULL) return NULL;
+    int n = 0;
+    for (_DWORD i = 0; i < numberOfNames; i++) {
+        _DWORD nameRVA = 0;
+        fseek(peFile->Ppefile, (long)(names_off + i * sizeof(_DWORD)),
+              SEEK_SET);
+        if (fread(&nameRVA, sizeof(_DWORD), 1, peFile->Ppefile) != 1) break;
+        _DWORD nameOff = resolve64(peFile, nameRVA, locate64(peFile, nameRVA));
+        if (nameOff == 0) continue;
+        char buf[512];
+        int j = 0;
+        fseek(peFile->Ppefile, (long)nameOff, SEEK_SET);
+        while (j < (int)sizeof(buf) - 1) {
+            int c = fgetc(peFile->Ppefile);
+            if (c == EOF || c == 0) break;
+            buf[j++] = (char)c;
+        }
+        buf[j] = 0;
+        if (j > 0) {
+            names[n] = (char*)malloc((size_t)j + 1);
+            if (names[n] != NULL) {
+                memcpy(names[n], buf, (size_t)j + 1);
+                n++;
+            }
+        }
+    }
+    if (count) *count = n;
+    return names;
+}
+
+// Libera el array devuelto por ParseExportNames64.
+void FreeExportNames64(char** names, int count) {
+    if (names == NULL) return;
+    for (int i = 0; i < count; i++)
+        free(names[i]);
+    free(names);
 }
 
 #define MAX_BASE_RELOC_BLOCKS 4096
