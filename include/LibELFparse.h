@@ -941,6 +941,10 @@ size_t elf_symbol_count(const ElfFile *elf, size_t *symtab_idx);
 const char *elf_symbol_name(const ElfFile *elf, size_t symtab_idx, size_t sym_idx);
 uint64_t elf_symbol_value(const ElfFile *elf, size_t symtab_idx, size_t sym_idx);
 uint8_t elf_symbol_info(const ElfFile *elf, size_t symtab_idx, size_t sym_idx);
+// Nombres exportados por la tabla dinamica (SHT_DYNSYM): globales/weak
+// definidos.  array char** liberable con FreeExportNames64; NULL si no hay
+// dynsym.  Solo ELF64.
+char **elf_dynsym_export_names(const ElfFile *elf, int *count);
 void show_elf_info(const ElfFile *elf);
 // Relocaciones
 size_t elf_relocation_count(const ElfFile *elf, size_t rel_idx);

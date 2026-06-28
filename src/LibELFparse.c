@@ -700,6 +700,60 @@ uint8_t elf_symbol_info(const ElfFile *elf, size_t symtab_idx, size_t sym_idx) {
     }
 }
 
+// Devuelve los nombres de los simbolos EXPORTADOS por la tabla dinamica
+// (SHT_DYNSYM): globales/weak DEFINIDOS (st_shndx != SHN_UNDEF).  Es lo que una
+// .so ofrece al enlazar (libc.so.6 esta stripped y no tiene SHT_SYMTAB, solo
+// dynsym).  Devuelve un array char** (calloc'd, cada string malloc'd) con
+// *count entradas, liberable con FreeExportNames64; NULL si no hay dynsym.
+// Solo ELF64.
+char **elf_dynsym_export_names(const ElfFile *elf, int *count) {
+    if (count) *count = 0;
+    if (elf == NULL || elf->elf_class != ELFCLASS_64) return NULL;
+    Elf64_Header *eh = elf->ehdr64;
+    Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)elf->mem + eh->e_shoff);
+    const size_t nsec = eh->e_shnum;
+    int ds = -1;
+    for (size_t i = 0; i < nsec; ++i)
+        if (shdr[i].sh_type == SHT_DYNSYM) {
+            ds = (int)i;
+            break;
+        }
+    if (ds < 0) return NULL;
+    Elf64_Shdr *sym_sh = &shdr[ds];
+    if (sym_sh->sh_entsize == 0) return NULL;
+    if (sym_sh->sh_link >= nsec) return NULL;
+    Elf64_Shdr *str_sh = &shdr[sym_sh->sh_link];
+    if (sym_sh->sh_offset + sym_sh->sh_size > elf->size ||
+        str_sh->sh_offset >= elf->size)
+        return NULL;
+    const size_t n = (size_t)(sym_sh->sh_size / sym_sh->sh_entsize);
+    Elf64_Sym *syms = (Elf64_Sym *)((uint8_t *)elf->mem + sym_sh->sh_offset);
+    const char *strbase = (const char *)elf->mem + str_sh->sh_offset;
+    const size_t strmax = (size_t)(elf->size - str_sh->sh_offset);
+    char **names = (char **)calloc(n ? n : 1, sizeof(char *));
+    if (names == NULL) return NULL;
+    int m = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if (syms[i].st_shndx == 0) continue;          // SHN_UNDEF: no definido
+        const unsigned bind = (unsigned)(syms[i].st_info >> 4);
+        if (bind != 1 && bind != 2) continue;          // STB_GLOBAL=1 STB_WEAK=2
+        if (syms[i].st_name >= strmax) continue;
+        const char *nm = strbase + syms[i].st_name;
+        if (nm[0] == 0) continue;
+        size_t L = 0;
+        while (syms[i].st_name + L < strmax && nm[L])
+            ++L;
+        names[m] = (char *)malloc(L + 1);
+        if (names[m] != NULL) {
+            memcpy(names[m], nm, L);
+            names[m][L] = 0;
+            ++m;
+        }
+    }
+    if (count) *count = m;
+    return names;
+}
+
 // --- Relocaciones ---
 size_t elf_relocation_count(const ElfFile *elf, size_t rel_idx) {
     if (elf->elf_class==ELFCLASS_32) {
