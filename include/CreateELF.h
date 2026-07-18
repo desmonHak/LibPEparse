@@ -44,6 +44,7 @@
 
 // ELF Machine
 #define EM_X86_64 62
+#define EM_AARCH64 183  // ARM 64-bit (AArch64)
 
 // ELF Identification indices
 #define EI_MAG0 0
@@ -158,6 +159,7 @@ typedef struct {
     size_t capacity;     // Total capacity of the buffer
     size_t size;         // Current used size of the buffer
     int is64;            // 1 for 64-bit, 0 for 32-bit
+    uint16_t machine;    // e_machine (EM_X86_64 por defecto; EM_AARCH64 para ARM)
 
     // Pointers to the main structures within `mem`
     void *ehdr;          // ELF header (points to start of `mem`)
@@ -179,6 +181,11 @@ typedef struct {
 // Crea un ElfBuilder para generar un ejecutable de 64 bits
 // capacity: Tamaño máximo estimado para el archivo ELF
 ElfBuilder *elf_builder_create_exec64(size_t capacity, size_t number_program_headers);
+
+// Fija la arquitectura (e_machine) del ELF a generar.  Por defecto EM_X86_64;
+// llamar con EM_AARCH64 para producir un ELF de ARM 64-bit.  Afecta al
+// e_machine que escribe elf_builder_finalize_exec64.
+void elf_builder_set_machine(ElfBuilder *b, uint16_t machine);
 
 
 // Añade una sección al ELF

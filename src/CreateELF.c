@@ -33,6 +33,7 @@ ElfBuilder *elf_builder_create_exec64(size_t capacity, size_t number_program_hea
     b->capacity = capacity;
     b->size = 0; // Current size of data in the buffer
     b->is64 = 1; // Mark as 64-bit ELF
+    b->machine = EM_X86_64; // Arquitectura por defecto (override: elf_builder_set_machine)
 
     // Initialize shstrtab (section header string table) buffer.
     // It starts with a mandatory null byte at offset 0.
@@ -210,6 +211,11 @@ size_t elf_builder_add_section(ElfBuilder *b, const char *name, uint32_t type, u
 }
 
 
+// Fija la arquitectura (e_machine) del ELF a generar (EM_X86_64 / EM_AARCH64).
+void elf_builder_set_machine(ElfBuilder *b, uint16_t machine) {
+    if (b) b->machine = machine;
+}
+
 // Finalizes the ELF executable by populating the ELF header and copying the section header table.
 // The program headers are expected to be set up by the caller directly in b->phdr.
 void elf_builder_finalize_exec64(ElfBuilder *b, uint64_t entry) {
@@ -304,7 +310,7 @@ void elf_builder_finalize_exec64(ElfBuilder *b, uint64_t entry) {
     ehdr->e_ident[EI_OSABI] = ELFOSABI_SYSV;   // Standard System V ABI
     ehdr->e_ident[EI_ABIVERSION] = 0;          // No specific ABI version
     ehdr->e_type = ET_EXEC;                    // Executable file
-    ehdr->e_machine = EM_X86_64;               // x86-64 architecture
+    ehdr->e_machine = b->machine ? b->machine : EM_X86_64; // arch (x86-64 / AArch64)
     ehdr->e_version = EV_CURRENT;              // ELF current version
     ehdr->e_entry = entry;                     // Entry point virtual address (provided by caller)
     ehdr->e_phoff = sizeof(Elf64_Ehdr);        // Program headers are located right after the ELF header
