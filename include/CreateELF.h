@@ -10,135 +10,321 @@
 // RIP -> https://www.tortall.net/projects/yasm/manual/html/nasm-effaddr.html
 
 #include "LibELFparse.h"
+
+// ELF Identification indices (posiciones dentro de e_ident)
 #ifndef EI_MAG0
 #define EI_MAG0         0
+#endif
+#ifndef EI_MAG1
 #define EI_MAG1         1
+#endif
+#ifndef EI_MAG2
 #define EI_MAG2         2
+#endif
+#ifndef EI_MAG3
 #define EI_MAG3         3
+#endif
+#ifndef EI_CLASS
 #define EI_CLASS        4
+#endif
+#ifndef EI_DATA
 #define EI_DATA         5
+#endif
+#ifndef EI_VERSION
 #define EI_VERSION      6
+#endif
+#ifndef EI_OSABI
 #define EI_OSABI        7
+#endif
+#ifndef EI_ABIVERSION
 #define EI_ABIVERSION   8
 #endif
 
+/* Las constantes del formato ELF van CADA UNA con su guarda.
+ *
+ * La cabecera tiene que seguir siendo autosuficiente: si el compilador o la
+ * plataforma no las trae, aqui estan.  Pero muchas de estas ya las define
+ * LibELFparse.h -- la otra mitad de esta misma libreria, que se incluye arriba:
+ * alli se leen los ELF y aqui se escriben, y las constantes del formato son
+ * unas --, y algunas plataformas las traen ademas en su <elf.h>.
+ *
+ * Sin la guarda, definirlas otra vez con el mismo valor escrito de otra forma
+ * -- 0x7f frente a 0x7F, 2 frente a (2), 11 frente a 0xb -- es una violacion de
+ * restriccion: con -pedantic-errors deja de ser aviso y pasa a error, y ese era
+ * el unico motivo de que esta cabecera no compilase como C++.  Con la guarda,
+ * gana quien llegue primero y no se define nada dos veces.
+ *
+ * La guarda va por macro, no por bloque: LibELFparse.h define casi todas las
+ * SHT_* pero no SHT_SHLIB, asi que un solo #ifndef alrededor del grupo dejaria
+ * fuera justo la que no viene de ningun otro sitio. */
+
+#ifndef ELFMAG0
 #define ELFMAG0 0x7f
+#endif
+#ifndef ELFMAG1
 #define ELFMAG1 'E'
+#endif
+#ifndef ELFMAG2
 #define ELFMAG2 'L'
+#endif
+#ifndef ELFMAG3
 #define ELFMAG3 'F'
+#endif
 
 // ELF Class
+#ifndef ELFCLASS64
 #define ELFCLASS64 2
+#endif
 
 // ELF Data encoding
+#ifndef ELFDATA2LSB
 #define ELFDATA2LSB 1
+#endif
 
 // ELF Version
+#ifndef EV_CURRENT
 #define EV_CURRENT 1
+#endif
 
 // ELF OS/ABI
+#ifndef ELFOSABI_SYSV
 #define ELFOSABI_SYSV 0
+#endif
 
 // ELF Type
+#ifndef ET_EXEC
 #define ET_EXEC 2
+#endif
 
 // ELF Machine
+#ifndef EM_X86_64
 #define EM_X86_64 62
-#define EM_AARCH64 183  // ARM 64-bit (AArch64)
+#endif
+#ifndef EM_AARCH64
+#define EM_AARCH64 183 // ARM 64-bit (AArch64)
+#endif
 
-// ELF Identification indices
-#define EI_MAG0 0
-#define EI_MAG1 1
-#define EI_MAG2 2
-#define EI_MAG3 3
-#define EI_CLASS 4
-#define EI_DATA 5
-#define EI_VERSION 6
-#define EI_OSABI 7
-#define EI_ABIVERSION 8
+/* Aqui habia un segundo juego de EI_MAG0..EI_ABIVERSION, copia literal del de
+ * arriba y sin guarda.  No daba error porque los valores coincidian token a
+ * token, pero anulaba la guarda del primero: en una plataforma que ya trajera
+ * esos indices, la copia los redefinia igualmente. */
 
 // Section Header Types
+#ifndef SHT_NULL
 #define SHT_NULL 0
+#endif
+#ifndef SHT_PROGBITS
 #define SHT_PROGBITS 1
+#endif
+#ifndef SHT_SYMTAB
 #define SHT_SYMTAB 2
+#endif
+#ifndef SHT_STRTAB
 #define SHT_STRTAB 3
+#endif
+#ifndef SHT_RELA
 #define SHT_RELA 4
+#endif
+#ifndef SHT_HASH
 #define SHT_HASH 5
+#endif
+#ifndef SHT_DYNAMIC
 #define SHT_DYNAMIC 6
+#endif
+#ifndef SHT_NOTE
 #define SHT_NOTE 7
+#endif
+#ifndef SHT_NOBITS
 #define SHT_NOBITS 8
+#endif
+#ifndef SHT_REL
 #define SHT_REL 9
+#endif
+#ifndef SHT_SHLIB
 #define SHT_SHLIB 10
+#endif
+#ifndef SHT_DYNSYM
 #define SHT_DYNSYM 11
+#endif
 
 // Section Header Flags
+#ifndef SHF_WRITE
 #define SHF_WRITE 0x1
+#endif
+#ifndef SHF_ALLOC
 #define SHF_ALLOC 0x2
+#endif
+#ifndef SHF_EXECINSTR
 #define SHF_EXECINSTR 0x4
+#endif
 
 // Program Header Types
+#ifndef PT_NULL
 #define PT_NULL 0
+#endif
+#ifndef PT_LOAD
 #define PT_LOAD 1
+#endif
+#ifndef PT_DYNAMIC
 #define PT_DYNAMIC 2
+#endif
+#ifndef PT_INTERP
 #define PT_INTERP 3
+#endif
+#ifndef PT_NOTE
 #define PT_NOTE 4
+#endif
+#ifndef PT_SHLIB
 #define PT_SHLIB 5
+#endif
+#ifndef PT_PHDR
 #define PT_PHDR 6
+#endif
 
 // Program Header Flags
+#ifndef PF_X
 #define PF_X 0x1
+#endif
+#ifndef PF_W
 #define PF_W 0x2
+#endif
+#ifndef PF_R
 #define PF_R 0x4
+#endif
 
 // Symbol Table
+#ifndef STB_LOCAL
 #define STB_LOCAL 0
+#endif
+#ifndef STB_GLOBAL
 #define STB_GLOBAL 1
+#endif
+#ifndef STB_WEAK
 #define STB_WEAK 2
+#endif
 
+#ifndef STT_NOTYPE
 #define STT_NOTYPE 0
+#endif
+#ifndef STT_OBJECT
 #define STT_OBJECT 1
+#endif
+#ifndef STT_FUNC
 #define STT_FUNC 2
+#endif
+#ifndef STT_SECTION
 #define STT_SECTION 3
+#endif
+#ifndef STT_FILE
 #define STT_FILE 4
+#endif
 
+#ifndef SHN_UNDEF
 #define SHN_UNDEF 0
+#endif
 
 // Dynamic Tags
+#ifndef DT_NULL
 #define DT_NULL 0
+#endif
+#ifndef DT_NEEDED
 #define DT_NEEDED 1
+#endif
+#ifndef DT_PLTRELSZ
 #define DT_PLTRELSZ 2
+#endif
+#ifndef DT_PLTGOT
 #define DT_PLTGOT 3
+#endif
+#ifndef DT_HASH
 #define DT_HASH 4
+#endif
+#ifndef DT_STRTAB
 #define DT_STRTAB 5
+#endif
+#ifndef DT_SYMTAB
 #define DT_SYMTAB 6
+#endif
+#ifndef DT_RELA
 #define DT_RELA 7
+#endif
+#ifndef DT_RELASZ
 #define DT_RELASZ 8
+#endif
+#ifndef DT_RELAENT
 #define DT_RELAENT 9
+#endif
+#ifndef DT_STRSZ
 #define DT_STRSZ 10
+#endif
+#ifndef DT_SYMENT
 #define DT_SYMENT 11
+#endif
+#ifndef DT_INIT
 #define DT_INIT 12
+#endif
+#ifndef DT_FINI
 #define DT_FINI 13
+#endif
+#ifndef DT_SONAME
 #define DT_SONAME 14
+#endif
+#ifndef DT_RPATH
 #define DT_RPATH 15
+#endif
+#ifndef DT_SYMBOLIC
 #define DT_SYMBOLIC 16
+#endif
+#ifndef DT_REL
 #define DT_REL 17
+#endif
+#ifndef DT_RELSZ
 #define DT_RELSZ 18
+#endif
+#ifndef DT_RELENT
 #define DT_RELENT 19
+#endif
+#ifndef DT_PLTREL
 #define DT_PLTREL 20
+#endif
+#ifndef DT_DEBUG
 #define DT_DEBUG 21
+#endif
+#ifndef DT_TEXTREL
 #define DT_TEXTREL 22
+#endif
+#ifndef DT_JMPREL
 #define DT_JMPREL 23
+#endif
 
 // Relocation Types
+#ifndef R_X86_64_NONE
 #define R_X86_64_NONE 0
+#endif
+#ifndef R_X86_64_64
 #define R_X86_64_64 1
+#endif
+#ifndef R_X86_64_PC32
 #define R_X86_64_PC32 2
+#endif
+#ifndef R_X86_64_GOT32
 #define R_X86_64_GOT32 3
+#endif
+#ifndef R_X86_64_PLT32
 #define R_X86_64_PLT32 4
+#endif
+#ifndef R_X86_64_COPY
 #define R_X86_64_COPY 5
+#endif
+#ifndef R_X86_64_GLOB_DAT
 #define R_X86_64_GLOB_DAT 6
+#endif
+#ifndef R_X86_64_JUMP_SLOT
 #define R_X86_64_JUMP_SLOT 7
+#endif
+#ifndef R_X86_64_RELATIVE
 #define R_X86_64_RELATIVE 8
+#endif
 
 /**
  * Permite obtener la direccion a la entrada de la GOT especificada, cada entrada ocupa 8 bytes(un puntero)
@@ -260,26 +446,39 @@ size_t elf_builder_add_section_ex(
  *      push <relocation_index>              ; 2. Apila el índice de relocalización
  *      jmp <plt0>                           ; 3. Salta al inicio de la PLT (PLT0)
  */
+/* Los struct sin nombre van marcados con __C89_NAMELESS.
+ *
+ * Un struct anonimo es C11 valido, pero en C++ es una extension: ISO C++ solo
+ * admite anonimas las UNIONES, y por eso las de aqui no llevan marca.  Con
+ * -pedantic-errors el compilador esta obligado a rechazarlo, y sin la marca
+ * esta cabecera no se puede incluir desde C++.
+ *
+ * __C89_NAMELESS es el mecanismo que la propia libreria ya trae (LibPEparse.h,
+ * copiado de las cabeceras de MinGW, que resuelven esto mismo): se expande a
+ * __extension__ en GCC y Clang -- "esto es una extension y lo se", que es
+ * exactamente lo que hay que decir -- y a nada en el resto, donde no estorba.
+ * No cambia la disposicion en memoria: los nombres de los campos se siguen
+ * usando sin cualificar. */
 typedef struct plt_entry_t{
     union {
-        struct {
+        __C89_NAMELESS struct {
             union {
                 uint8_t jmp_got[6];                 // jmp QWORD PTR [rip + offset_to_GOT]
-                struct {
+                __C89_NAMELESS struct {
                     uint16_t opcode_jmp_got_rip;    // opcode 0xff, 0x25 == jmp QWORD PTR
                     uint32_t offset_jmp_got;        // [rip + offset_to_GOT]
                 };
             };
             union {
                 uint8_t push[5];                    // push <relocation_index>
-                struct {
+                __C89_NAMELESS struct {
                     uint8_t opcode_push;            // 0x68 opcode == push
                     uint32_t offset_got;            // relocation_index
                 };
             };
             union {
                 uint8_t jmp_plt[5];                 // jmp <plt0>
-                struct {
+                __C89_NAMELESS struct {
                     uint8_t opcode_jmp_plt;         // opcode 0xff, 0x25 == jmp QWORD PTR
                     uint32_t offset_jmp_plt_got;    // [rip + offset_to_GOT]
                 };

@@ -359,7 +359,18 @@ typedef struct __IMAGE_IMPORT_DESCRIPTOR {
     _DWORD   ForwarderChain;
     _DWORD   Name;
     _DWORD   FirstThunk;
-} ___IMAGE_IMPORT_DESCRIPTOR UNALIGNED, * ___PIMAGE_IMPORT_DESCRIPTOR;
+/* El `UNALIGNED` iba aqui, entre el nombre del typedef y la coma, y en esa
+ * posicion no hacia NADA: GCC lo descarta diciendo "'packed' attribute
+ * ignored" -- comprobado, la estructura mide 20 bytes con el y sin el, que es
+ * lo esperable siendo cinco _DWORD --, y con el Windows SDK de verdad, donde
+ * `UNALIGNED` es `__unaligned`, ni siquiera compila: es un cualificador y ese
+ * sitio no admite ninguno.
+ *
+ * En la cabecera original de Microsoft el cualificador va sobre el PUNTERO
+ * (`typedef IMAGE_IMPORT_DESCRIPTOR UNALIGNED *PIMAGE_IMPORT_DESCRIPTOR;`), no
+ * sobre el tipo.  Se quita en vez de moverlo porque aqui no aporta: quien lee
+ * campos desalineados de esta estructura lo hace por su cuenta. */
+} ___IMAGE_IMPORT_DESCRIPTOR, * ___PIMAGE_IMPORT_DESCRIPTOR;
 
 typedef struct __IMAGE_IMPORT_BY_NAME {
     _WORD    Hint;
